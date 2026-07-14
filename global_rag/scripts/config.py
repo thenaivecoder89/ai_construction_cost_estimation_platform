@@ -91,10 +91,8 @@ def config_paths(client_data: str):
 
     # Corpus packs
     corpus_packs = {
-        "01_RAG_Public_Deal_Documents": corpus_dir / "01_RAG_Public_Deal_Documents",
-        "02_Benchmark_and_Market_Data": corpus_dir / "02_Benchmark_and_Market_Data",
-        "03_ML_Input_Datasets": corpus_dir / "03_ML_Input_Datasets",
-        "04_Seed_Libraries": corpus_dir / "04_Seed_Libraries"
+        "body_of_knowledge": corpus_dir / "BOK",
+        "cost_database": corpus_dir / "CDB"
     }
 
     # Client data packs
@@ -126,10 +124,8 @@ def config_paths(client_data: str):
     # Corpus folder mapping - used for classifying documents based on folder location
     corpus_folder_map = {
         "client_data": "client_evidence",
-        "01_RAG_Public_Deal_Documents": "01_RAG_Public_Deal_Documents",
-        "02_Benchmark_and_Market_Data": "02_Benchmark_and_Market_Data",
-        "03_ML_Input_Datasets": "03_ML_Input_Datasets",
-        "04_Seed_Libraries": "04_Seed_Libraries"
+        "body_of_knowledge": "body_of_knowledge",
+        "cost_database": "cost_database"
     }
 
     #  Basic project checks - to confirm required project folders exist
@@ -137,10 +133,8 @@ def config_paths(client_data: str):
         client_data_dir,
         corpus_dir,
         active_client_data_dir,
-        corpus_packs["01_RAG_Public_Deal_Documents"],
-        corpus_packs["02_Benchmark_and_Market_Data"],
-        corpus_packs["03_ML_Input_Datasets"],
-        corpus_packs["04_Seed_Libraries"]
+        corpus_packs["body_of_knowledge"],
+        corpus_packs["cost_database"]
     ]
 
     if __name__ == "__main__":
