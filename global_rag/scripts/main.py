@@ -132,57 +132,57 @@ def scrape_world_bank_wdi(
 
     return api_response
 
-@app.get(path="/retrieve_chunks", status_code=200)
-def retrieve_chunks_api(
-    q: str,
-    top_k: int = 10,
-    mode: str = "hybrid",
-    corpus_zone: Optional[str] = None,
-    corpus_pack: Optional[str] = None,
-    document_id: Optional[str] = None,
-    max_chunk_chars: int = 3000
-):
-    retrieval_output = ret.retrieve_chunks(
-        query_text=q,
-        top_k=top_k,
-        mode=mode,
-        corpus_zone=corpus_zone,
-        corpus_pack=corpus_pack,
-        document_id=document_id,
-        max_chunk_chars=max_chunk_chars
-    )
+# @app.get(path="/retrieve_chunks", status_code=200)
+# def retrieve_chunks_api(
+#     q: str,
+#     top_k: int = 10,
+#     mode: str = "hybrid",
+#     corpus_zone: Optional[str] = None,
+#     corpus_pack: Optional[str] = None,
+#     document_id: Optional[str] = None,
+#     max_chunk_chars: int = 3000
+# ):
+#     retrieval_output = ret.retrieve_chunks(
+#         query_text=q,
+#         top_k=top_k,
+#         mode=mode,
+#         corpus_zone=corpus_zone,
+#         corpus_pack=corpus_pack,
+#         document_id=document_id,
+#         max_chunk_chars=max_chunk_chars
+#     )
 
-    api_response = JSONResponse(
-        {
-            "status": "ok",
-            "output": retrieval_output
-        }
-    )
+#     api_response = JSONResponse(
+#         {
+#             "status": "ok",
+#             "output": retrieval_output
+#         }
+#     )
 
-    return api_response
+#     return api_response
 
-@app.get(path="/generate_ic_review_report", status_code=200)
-def generate_ic_review_report_api(
-    transaction_id: str,
-    use_llm_summary: bool = True,
-    write_audit: bool = True
-):
-    report_generation_output = rg.generate_investment_ic_review_report(
-        transaction_id=transaction_id,
-        use_llm_summary=use_llm_summary,
-        write_audit=write_audit
-    )
+# @app.get(path="/generate_ic_review_report", status_code=200)
+# def generate_ic_review_report_api(
+#     transaction_id: str,
+#     use_llm_summary: bool = True,
+#     write_audit: bool = True
+# ):
+#     report_generation_output = rg.generate_investment_ic_review_report(
+#         transaction_id=transaction_id,
+#         use_llm_summary=use_llm_summary,
+#         write_audit=write_audit
+#     )
 
-    api_response = JSONResponse(
-        content=jsonable_encoder(
-            {
-                "status": "ok",
-                "output": report_generation_output
-            }
-        )
-    )
+#     api_response = JSONResponse(
+#         content=jsonable_encoder(
+#             {
+#                 "status": "ok",
+#                 "output": report_generation_output
+#             }
+#         )
+#     )
 
-    return api_response
+#     return api_response
 
 @app.get(path="/country_macro_llm_call", status_code=200)
 def country_macro_llm_call_api(
@@ -251,8 +251,8 @@ def country_arima_llm_call_api(
 
     return api_response
 
-@app.get(path="/investment_chatbot", status_code=200)
-def investment_chatbot_api(
+@app.get(path="/ai_cost_estimation_chatbot", status_code=200)
+def ai_cost_estimation_chatbot_api(
     q: str,
     client_data_pack: Optional[str] = None,
     top_k: int = 8,
