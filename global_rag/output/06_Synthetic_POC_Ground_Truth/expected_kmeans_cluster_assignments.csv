@@ -1,0 +1,21 @@
+Project_ID,Project_Name,Expected_Profile_Label,Expected_KMeans_Cluster,Recommended_Feature_Set,Silhouette_Score
+TXN_HELIOS_001,Project Helios Solar & Storage,High-cost solar+BESS,3,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOL_002,Siam Solar East,Low-cost utility solar,2,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOLB_003,Lotus Storage Solar,Mid-cost solar+BESS,1,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOL_004,Rajasthan Sun A,Low-cost utility solar,2,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOLB_005,Gujarat Flex,Mid-cost solar+BESS,1,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOL_006,Desert Pearl,Low-cost utility solar,2,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOLB_007,Emirates Flex Solar,Mid-cost solar+BESS,1,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOL_008,Nile Sun I,Low-cost utility solar,2,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOLB_009,Nile Grid Support,High-cost solar+BESS,3,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOL_010,Kalahari Sun,Mid-cost utility solar,2,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOLB_011,Cape Flex,High-cost solar+BESS,3,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOL_012,Mekong Solar,Mid-cost utility solar,2,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_FLOAT_013,Mekong Floating I,Floating solar,0,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_FLOAT_014,Lagoon Float,Floating solar,0,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOLB_015,Andes Hybrid,Mid-cost solar+BESS,1,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOL_016,Atacama Solar,Low-cost utility solar,2,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOLB_017,Atlas Solar Storage,High-cost solar+BESS,3,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOL_018,Jordan Sun,Mid-cost utility solar,2,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOLB_019,Jordan Flex,Mid-cost solar+BESS,1,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175
+COST_SOL_020,Deccan Sun II,Low-cost utility solar,2,Total_Cost_per_Solar_MW_USD_mn; BESS_Energy_MWh; Pct_BESS_equipment; Pct_Grid_interconnection; Pct_EPC_contingency; Pct_Corporate_platform_overhead,0.6175

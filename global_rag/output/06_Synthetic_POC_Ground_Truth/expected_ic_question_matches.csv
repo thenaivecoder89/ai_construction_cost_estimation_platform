@@ -1,0 +1,16 @@
+﻿Theme,Matched_Question,Expected_Preparedness_Status,Expected_Rationale,Expected_Rank
+Merchant exposure,What proportion of revenue is contracted versus merchant-exposed?,Fully addressed,70% contracted / 30% merchant is stated.,1
+Merchant price curve,How does the investment case compare with an independent merchant price curve?,Partially addressed,Curve is stated but independent source is not appended.,2
+Offtaker credit,What is the offtaker credit profile and what payment-security package is available?,Not addressed,No independent credit assessment or payment history.,3
+IRR bridge,What explains the movement from the seller case to the management case?,Not addressed,No seller-to-management bridge.,4
+Valuation,How does EV/MW and EV/EBITDA compare with relevant transactions and public benchmarks?,Partially addressed,Metrics are stated but comparable set is not shown.,5
+Construction risk,Is EPC contingency adequate and is the EPC contract fixed-price and date-certain?,Partially addressed,EPC route is described; contingency basis is weak.,6
+Grid,Is the grid-connection agreement executed and are reinforcement costs capped?,Partially addressed,Milestone described but cost cap not evidenced.,7
+Curtailment,Has curtailment been independently assessed and stress-tested?,Partially addressed,Base curtailment stated; severe downside absent.,8
+BESS degradation,"Are degradation, cycle-life and augmentation assumptions clearly modelled?",Not addressed,Augmentation case omitted.,9
+FX,"Are revenue, debt and capex currencies matched or hedged?",Partially addressed,Hedging intent stated without executed terms.,10
+Sensitivity,Has a combined downside case been run rather than only single-variable sensitivities?,Not addressed,Combined downside is absent from submitted pack.,11
+Cybersecurity,"Are plant-control, EMS and remote-access cybersecurity risks covered?",Not addressed,No dedicated cyber assessment.,12
+Decommissioning,Are decommissioning and battery-disposal obligations funded?,Not addressed,Funding mechanism not included.,13
+Governance,Do the shareholder arrangements provide effective control and reserved-matter protections?,Fully addressed,Board and reserved matters are described.,14
+Land,Are land rights fully secured for the PPA and debt tenor plus extension period?,Partially addressed,Most land secured; final easements remain open.,15

@@ -1,0 +1,2 @@
+item,status,note
+Sandbox external download,not_completed,The execution environment could not resolve external DNS hostnames; use scripts/download_all_data.py locally.

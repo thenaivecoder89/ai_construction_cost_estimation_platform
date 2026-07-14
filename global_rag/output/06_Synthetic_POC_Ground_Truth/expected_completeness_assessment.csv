@@ -1,0 +1,13 @@
+﻿Checklist_Section,Expected_Status,Expected_Rationale,Expected_Evidence
+Investment rationale,Pass,Clear acquisition rationale and value-creation thesis are presented.,Memo section 2; Deck slide 2
+Strategic fit,Partial,Technology and geography fit are asserted but portfolio concentration impact is not quantified.,Memo section 3; Deck slide 4
+Financial returns,Partial,"Returns are present but differ across the deck, memo and workbook.",Deck slide 7; Memo section 7; Workbook Summary
+Revenue assumptions,Partial,PPA and merchant assumptions are present; independent merchant curve source is missing.,Memo section 6; Workbook Assumptions
+Risk assessment,Partial,Major risks are included but cybersecurity and battery augmentation are not adequately covered.,Memo section 11; Deck slide 11
+Sensitivities,Partial,Single-variable sensitivities are shown; combined downside and BESS augmentation cases are omitted.,Memo section 10; Workbook Sensitivities
+Valuation benchmark,Partial,EV/MW and EV/EBITDA are stated but the comparable set and adjustments are not supplied.,Memo section 8
+Governance and deal structure,Pass,"80% stake, reserved matters and board rights are described.",Memo section 12; Deck slide 3
+Counterparty and offtaker,Partial,"PPA structure is described, but no independent credit assessment or payment history is included.",Memo section 6
+Development and construction readiness,Pass,"Permits, EPC route, schedule and grid milestones are described with open items.",Memo sections 5 and 9
+ESG and legal,Partial,"Key issues are summarized, but final land-right confirmations and community action closure are pending.",Memo section 13; Market note appendix
+Previous IC requests,Missing,The prior request on cybersecurity and decommissioning funding is not expressly answered.,No direct response found

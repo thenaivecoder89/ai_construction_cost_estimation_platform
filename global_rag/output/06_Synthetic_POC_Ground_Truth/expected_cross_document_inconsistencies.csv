@@ -1,0 +1,7 @@
+﻿ID,Metric,Deck_Value,Memo_Value,Workbook_Value,Expected_Flag
+INC-001,Total project cost,285.0 USD mn,292.0 USD mn,289.0 USD mn,High
+INC-002,Equity IRR,14.6%,14.2%,13.9%,High
+INC-003,COD,30-Jun-2028,30-Sep-2028,30-Sep-2028,High
+INC-004,Capacity factor,25.5%,24.9%,24.7%,Medium
+INC-005,PPA price,60 USD/MWh,58 USD/MWh,58 USD/MWh,Medium
+INC-006,Annual net generation,558 GWh,545 GWh,~541 GWh,Medium

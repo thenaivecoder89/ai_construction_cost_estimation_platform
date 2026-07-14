@@ -1,0 +1,8 @@
+timestamp_utc,source_id,target_filename,status,url,message
+2026-06-09T06:59:20.941067+00:00,IFC_001,IFC_FRV_Solar_India_SII.html,downloaded,https://disclosures.ifc.org/project-detail/SII/39151/frv-solar-india,"Saved HTML, TXT, metadata JSON; 11834 text chars."
+2026-06-09T06:59:22.071901+00:00,IFC_002,IFC_Azure_RG_Project_SII.html,downloaded,https://disclosures.ifc.org/project-detail/SII/40099/azure-rg-project,"Saved HTML, TXT, metadata JSON; 10166 text chars."
+2026-06-09T06:59:22.894744+00:00,IFC_003,IFC_PCR_Renewables_SII.html,downloaded,https://disclosures.ifc.org/project-detail/SII/49802/pcr-renewables,"Saved HTML, TXT, metadata JSON; 11167 text chars."
+2026-06-09T06:59:23.717038+00:00,IFC_004,IFC_FP_Energy_EF_SII.html,downloaded,https://disclosures.ifc.org/project-detail/SII/48551/fp-energy-ef,"Saved HTML, TXT, metadata JSON; 12857 text chars."
+2026-06-09T06:59:24.507155+00:00,IFC_005,IFC_Candi_Solar_CI_SII.html,downloaded,https://disclosures.ifc.org/project-detail/SII/49109/candi-solar-ci,"Saved HTML, TXT, metadata JSON; 14271 text chars."
+2026-06-09T06:59:25.315489+00:00,IFC_006,IFC_Elementum_Debt_SII.html,downloaded,https://disclosures.ifc.org/project-detail/SII/49272/elementum-debt,"Saved HTML, TXT, metadata JSON; 13333 text chars."
+2026-06-09T06:59:26.121430+00:00,IFC_007,IFC_IndiGrid_BESS_ESRS.html,downloaded,https://disclosures.ifc.org/project-detail/ESRS/49907/indigrid-bess,"Saved HTML, TXT, metadata JSON; 35326 text chars."

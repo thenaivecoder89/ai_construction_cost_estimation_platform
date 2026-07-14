@@ -1,0 +1,1 @@
+"""Global RAG pipeline package."""

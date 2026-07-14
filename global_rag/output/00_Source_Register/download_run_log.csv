@@ -1,0 +1,39 @@
+source_id,target_filename,status,url,message
+IFC_001,IFC_FRV_Solar_India_SII.html,failed,https://disclosures.ifc.org/project-detail/SII/39151/frv-solar-india,unsupported operand type(s) for +: 'WindowsPath' and 'str'
+IFC_002,IFC_Azure_RG_Project_SII.html,failed,https://disclosures.ifc.org/project-detail/SII/40099/azure-rg-project,unsupported operand type(s) for +: 'WindowsPath' and 'str'
+IFC_003,IFC_PCR_Renewables_SII.html,failed,https://disclosures.ifc.org/project-detail/SII/49802/pcr-renewables,unsupported operand type(s) for +: 'WindowsPath' and 'str'
+IFC_004,IFC_FP_Energy_EF_SII.html,failed,https://disclosures.ifc.org/project-detail/SII/48551/fp-energy-ef,unsupported operand type(s) for +: 'WindowsPath' and 'str'
+IFC_005,IFC_Candi_Solar_CI_SII.html,failed,https://disclosures.ifc.org/project-detail/SII/49109/candi-solar-ci,unsupported operand type(s) for +: 'WindowsPath' and 'str'
+IFC_006,IFC_Elementum_Debt_SII.html,failed,https://disclosures.ifc.org/project-detail/SII/49272/elementum-debt,unsupported operand type(s) for +: 'WindowsPath' and 'str'
+IFC_007,IFC_IndiGrid_BESS_ESRS.html,failed,https://disclosures.ifc.org/project-detail/ESRS/49907/indigrid-bess,unsupported operand type(s) for +: 'WindowsPath' and 'str'
+ADB_001,ADB_Guzar_Solar_BESS_Project_Page.html,failed,https://www.adb.org/projects/58094-001/main,403 Client Error: Forbidden for url: https://www.adb.org/projects/58094-001/main
+ADB_004,ADB_Gulf_Solar_BESS_Project_Page.html,failed,https://www.adb.org/projects/57173-001/main,403 Client Error: Forbidden for url: https://www.adb.org/projects/57173-001/main
+ADB_007,ADB_Utility_Scale_BESS_Project_Page.html,failed,https://www.adb.org/projects/59110-001/main,403 Client Error: Forbidden for url: https://www.adb.org/projects/59110-001/main
+ADB_009,ADB_Energy_Storage_Green_Hydrogen_Project_Page.html,failed,https://www.adb.org/projects/54448-001/main,403 Client Error: Forbidden for url: https://www.adb.org/projects/54448-001/main
+ADB_010,ADB_Floating_Solar_Project_Page.html,failed,https://www.adb.org/projects/51327-001/main,403 Client Error: Forbidden for url: https://www.adb.org/projects/51327-001/main
+ADB_002,ADB_Guzar_Solar_BESS_ESIA_Part_2.pdf,failed,https://www.adb.org/sites/default/files/project-documents/58094/58094-001-esia-en_0.pdf,403 Client Error: Forbidden for url: https://www.adb.org/sites/default/files/project-documents/58094/58094-001-esia-en_0.pdf
+ADB_003,ADB_Guzar_Solar_BESS_ESIA_Part_4.pdf,failed,https://www.adb.org/sites/default/files/project-documents/58094/58094-001-esia-en_2.pdf,403 Client Error: Forbidden for url: https://www.adb.org/sites/default/files/project-documents/58094/58094-001-esia-en_2.pdf
+ADB_005,ADB_Gulf_Solar_BESS_SCAR.pdf,failed,https://www.adb.org/sites/default/files/project-documents/57173/57173-001-scar-en.pdf,403 Client Error: Forbidden for url: https://www.adb.org/sites/default/files/project-documents/57173/57173-001-scar-en.pdf
+ADB_006,ADB_Gulf_Solar_BESS_IEE.pdf,failed,https://www.adb.org/sites/default/files/project-documents/57173/57173-001-iee-en_1.pdf,403 Client Error: Forbidden for url: https://www.adb.org/sites/default/files/project-documents/57173/57173-001-iee-en_1.pdf
+ADB_008,ADB_Utility_Scale_BESS_Project_Printable.pdf,failed,https://www.adb.org/node/1065411/printable/pdf,403 Client Error: Forbidden for url: https://www.adb.org/node/1065411/printable/pdf
+NREL_001,2024_v3_Model_Parameters.csv,downloaded,https://data.openei.org/files/6006/2024_v3_Model_Parameters.csv,10214121 bytes
+NREL_002,2024_v3_Workbook_Corrected_04_02_2025.xlsx,downloaded,https://data.openei.org/files/6006/2024_v3_Workbook.xlsx,5008097 bytes
+WDI_001_GDP_Growth,WDI_001_GDP_Growth_2010_2025.csv,downloaded,https://api.worldbank.org/v2/country/ARE;SAU;IND;EGY;JOR;ZAF;THA;KHM;UZB;AUS/indicator/NY.GDP.MKTP.KD.ZG?format=json&per_page=20000&date=2010:2025,160 rows
+WDI_002_Inflation,WDI_002_Inflation_2010_2025.csv,downloaded,https://api.worldbank.org/v2/country/ARE;SAU;IND;EGY;JOR;ZAF;THA;KHM;UZB;AUS/indicator/FP.CPI.TOTL.ZG?format=json&per_page=20000&date=2010:2025,160 rows
+WDI_003_Official_Exchange_Rate,WDI_003_Official_Exchange_Rate_2010_2025.csv,downloaded,https://api.worldbank.org/v2/country/ARE;SAU;IND;EGY;JOR;ZAF;THA;KHM;UZB;AUS/indicator/PA.NUS.FCRF?format=json&per_page=20000&date=2010:2025,160 rows
+WDI_004_GDP_Current_USD,WDI_004_GDP_Current_USD_2010_2025.csv,downloaded,https://api.worldbank.org/v2/country/ARE;SAU;IND;EGY;JOR;ZAF;THA;KHM;UZB;AUS/indicator/NY.GDP.MKTP.CD?format=json&per_page=20000&date=2010:2025,160 rows
+NextEra_Energy,NextEra_Energy_submissions.json,downloaded,https://data.sec.gov/submissions/CIK0000753308.json,SEC submissions JSON saved
+NextEra_Energy,NextEra_Energy_Latest_10K.html,downloaded,https://www.sec.gov/Archives/edgar/data/753308/000075330826000015/nee-20251231.htm,Latest 10-K HTML/TXT saved
+NextEra_Energy,NextEra_Energy_companyfacts.json,downloaded,https://data.sec.gov/api/xbrl/companyfacts/CIK0000753308.json,SEC company facts JSON saved
+AES_Corporation,AES_Corporation_submissions.json,downloaded,https://data.sec.gov/submissions/CIK0000874761.json,SEC submissions JSON saved
+AES_Corporation,AES_Corporation_Latest_10K.html,downloaded,https://www.sec.gov/Archives/edgar/data/874761/000087476126000063/aes-20251231.htm,Latest 10-K HTML/TXT saved
+AES_Corporation,AES_Corporation_companyfacts.json,downloaded,https://data.sec.gov/api/xbrl/companyfacts/CIK0000874761.json,SEC company facts JSON saved
+First_Solar,First_Solar_submissions.json,downloaded,https://data.sec.gov/submissions/CIK0001274494.json,SEC submissions JSON saved
+First_Solar,First_Solar_Latest_10K.html,downloaded,https://www.sec.gov/Archives/edgar/data/1274494/000127449426000021/fslr-20251231.htm,Latest 10-K HTML/TXT saved
+First_Solar,First_Solar_companyfacts.json,downloaded,https://data.sec.gov/api/xbrl/companyfacts/CIK0001274494.json,SEC company facts JSON saved
+Ormat_Technologies,Ormat_Technologies_submissions.json,downloaded,https://data.sec.gov/submissions/CIK0001296445.json,SEC submissions JSON saved
+Ormat_Technologies,Ormat_Technologies_Latest_10K.html,downloaded,https://www.sec.gov/Archives/edgar/data/1296445/000129644526000006/ora-20251231.htm,Latest 10-K HTML/TXT saved
+Ormat_Technologies,Ormat_Technologies_companyfacts.json,downloaded,https://data.sec.gov/api/xbrl/companyfacts/CIK0001296445.json,SEC company facts JSON saved
+Enphase_Energy,Enphase_Energy_submissions.json,downloaded,https://data.sec.gov/submissions/CIK0001463101.json,SEC submissions JSON saved
+Enphase_Energy,Enphase_Energy_Latest_10K.html,downloaded,https://www.sec.gov/Archives/edgar/data/1463101/000146310126000013/enph-20251231.htm,Latest 10-K HTML/TXT saved
+Enphase_Energy,Enphase_Energy_companyfacts.json,downloaded,https://data.sec.gov/api/xbrl/companyfacts/CIK0001463101.json,SEC company facts JSON saved

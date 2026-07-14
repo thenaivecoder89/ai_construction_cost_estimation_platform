@@ -1,0 +1,16 @@
+﻿Metric,Expected_Value,Unit,Primary_Source,Source_Location,Cross_Document_Observation
+Solar capacity,250,MWac,Financial workbook,Assumptions!Value for Solar capacity,Deck states 250 MWac / 320 MWp
+BESS capacity,100,MW,Financial workbook,Assumptions!BESS power,Consistent
+BESS energy,200,MWh,Financial workbook,Assumptions!BESS energy,Consistent
+Total project cost,289.0,USD mn,Financial workbook,Assumptions!Total project cost,Deck says 285; memo says 292
+PPA price,58.0,USD/MWh,Financial workbook,Assumptions!PPA price 2029,Deck says 60
+Contracted revenue share,70.0,%,Financial workbook,Assumptions!Contracted share,Consistent
+Merchant revenue share,30.0,%,Financial workbook,Assumptions!Merchant share,Consistent
+Capacity factor,24.7,%,Financial workbook,Assumptions!Capacity factor,Deck says 25.5; memo says 24.9
+COD,2028-09-30,date,Financial workbook,Assumptions!Commercial operation date,Deck says 2028-06-30
+Debt share,65.0,%,Financial workbook,Assumptions!Debt share,Consistent
+Equity IRR,13.9,%,Financial workbook,Assumptions!Equity IRR,Deck says 14.6; memo says 14.2
+Project IRR,10.1,%,Financial workbook,Assumptions!Project IRR,Memo says 10.3
+NPV,39.4,USD mn,Financial workbook,Assumptions!NPV,Consistent within rounding
+Minimum DSCR,1.32,x,Financial workbook,Assumptions!Minimum DSCR,Deck says 1.35x
+EV/EBITDA,9.3,x,Financial workbook,Assumptions!EV / EBITDA,Comparable set not disclosed

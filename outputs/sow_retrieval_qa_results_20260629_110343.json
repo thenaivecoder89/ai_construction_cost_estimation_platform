@@ -1,0 +1,1026 @@
+{
+  "overall_summary": {
+    "overall_status": "FAIL",
+    "total_tests": 15,
+    "passed_tests": 10,
+    "failed_tests": 5,
+    "pass_rate_pct": 66.67,
+    "generated_at": "2026-06-29T11:03:43.903694"
+  },
+  "test_results": [
+    {
+      "test_id": "T01_COMPLETENESS_READINESS",
+      "sow_area": "5.1 Completeness & Readiness Check",
+      "query": "required submission components completeness readiness missing weak open items conditions precedent final investment approval metric reconciliation merchant price offtaker credit combined downside BESS augmentation permit cyber decommissioning",
+      "corpus_zone_filter": "client_data",
+      "status": "PASS",
+      "failure_details": [],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000008_CHUNK_000012",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_12",
+          "source_reference": "source_type=extracted_text; extracted_text_id=26; page_no=12; section_heading=slide_12",
+          "similarity_score": 0.6442654642306107,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000014_CHUNK_000002",
+          "document_id": "DOC_000014",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "docx_document_text",
+          "source_reference": "source_type=extracted_text; extracted_text_id=28; page_no=None; section_heading=docx_document_text",
+          "similarity_score": 0.6247349782055558,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000001_CHUNK_000012",
+          "document_id": "DOC_000001",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "page_12",
+          "source_reference": "source_type=extracted_text; extracted_text_id=13; page_no=12; section_heading=page_12",
+          "similarity_score": 0.584948198274035,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000001_CHUNK_000011",
+          "document_id": "DOC_000001",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "page_11",
+          "source_reference": "source_type=extracted_text; extracted_text_id=12; page_no=11; section_heading=page_11",
+          "similarity_score": 0.5670908924401593,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000008_CHUNK_000008",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_8",
+          "source_reference": "source_type=extracted_text; extracted_text_id=22; page_no=8; section_heading=slide_8",
+          "similarity_score": 0.5650741378004818,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T02_STRATEGY_FIT",
+      "sow_area": "5.2 Strategy and Fit Assessment",
+      "query": "strategy fit growth priorities geography technology portfolio concentration capital allocation control rights Thailand solar storage BESS contracted revenue",
+      "corpus_zone_filter": "client_data",
+      "status": "PASS",
+      "failure_details": [],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000008_CHUNK_000004",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_4",
+          "source_reference": "source_type=extracted_text; extracted_text_id=18; page_no=4; section_heading=slide_4",
+          "similarity_score": 0.6212249058138299,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000008_CHUNK_000002",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_2",
+          "source_reference": "source_type=extracted_text; extracted_text_id=16; page_no=2; section_heading=slide_2",
+          "similarity_score": 0.6064746696218809,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000001_CHUNK_000002",
+          "document_id": "DOC_000001",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "page_2",
+          "source_reference": "source_type=extracted_text; extracted_text_id=3; page_no=2; section_heading=page_2",
+          "similarity_score": 0.5545437769442649,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000001_CHUNK_000004",
+          "document_id": "DOC_000001",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "page_4",
+          "source_reference": "source_type=extracted_text; extracted_text_id=5; page_no=4; section_heading=page_4",
+          "similarity_score": 0.5472354326047763,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000014_CHUNK_000001",
+          "document_id": "DOC_000014",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "docx_document_text",
+          "source_reference": "source_type=extracted_text; extracted_text_id=28; page_no=None; section_heading=docx_document_text",
+          "similarity_score": 0.543015967359991,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T03_HISTORICAL_IC_QUESTIONS",
+      "sow_area": "5.3 Historical IC Questioning & Institutional Memory",
+      "query": "historical IC questions recurring IC themes merchant exposure construction technology risk counterparty credit downside protection risk allocation merchant price curves business case seller assumptions IRR bridge accounting impact book values follow up actions",
+      "corpus_zone_filter": null,
+      "status": "FAIL",
+      "failure_details": [
+        "Missing expected evidence term group. At least one of these terms was expected: ['IC question', 'IC questions', 'investment committee', 'committee']",
+        "Missing expected evidence term group. At least one of these terms was expected: ['follow-up', 'follow up', 'follow-up actions']",
+        "Historical IC question memory is not sufficiently evidenced. This may require loading historical IC Q&A logs / prior follow-up actions."
+      ],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000048_CHUNK_000021",
+          "document_id": "DOC_000048",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "04_Seed_Libraries",
+          "section_heading": "table: synthetic_historical_ic_qa",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000048_TBL_0001; table_name=synthetic_historical_ic_qa; sheet_name=; page_no=None; row_start=99; row_end=100",
+          "similarity_score": 0.5736933569222423,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000048_CHUNK_000018",
+          "document_id": "DOC_000048",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "04_Seed_Libraries",
+          "section_heading": "table: synthetic_historical_ic_qa",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000048_TBL_0001; table_name=synthetic_historical_ic_qa; sheet_name=; page_no=None; row_start=86; row_end=90",
+          "similarity_score": 0.5648042105352126,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000048_CHUNK_000013",
+          "document_id": "DOC_000048",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "04_Seed_Libraries",
+          "section_heading": "table: synthetic_historical_ic_qa",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000048_TBL_0001; table_name=synthetic_historical_ic_qa; sheet_name=; page_no=None; row_start=61; row_end=65",
+          "similarity_score": 0.5593304945431412,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000048_CHUNK_000001",
+          "document_id": "DOC_000048",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "04_Seed_Libraries",
+          "section_heading": "table: synthetic_historical_ic_qa",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000048_TBL_0001; table_name=synthetic_historical_ic_qa; sheet_name=; page_no=None; row_start=1; row_end=5",
+          "similarity_score": 0.5558252775594866,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000048_CHUNK_000020",
+          "document_id": "DOC_000048",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "04_Seed_Libraries",
+          "section_heading": "table: synthetic_historical_ic_qa",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000048_TBL_0001; table_name=synthetic_historical_ic_qa; sheet_name=; page_no=None; row_start=95; row_end=98",
+          "similarity_score": 0.5550321632237267,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T04_RISK_IDENTIFICATION_PROMPTS",
+      "sow_area": "5.4 Risk Identification and Challenge Prompts",
+      "query": "principal risks mitigants risk rating merchant exposure grid cost schedule BESS degradation offtaker credit land permits cybersecurity decommissioning curtailment construction technology risk",
+      "corpus_zone_filter": "client_data",
+      "status": "PASS",
+      "failure_details": [],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000001_CHUNK_000011",
+          "document_id": "DOC_000001",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "page_11",
+          "source_reference": "source_type=extracted_text; extracted_text_id=12; page_no=11; section_heading=page_11",
+          "similarity_score": 0.6525459635030623,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000014_CHUNK_000008",
+          "document_id": "DOC_000014",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "table: docx_table_6",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000014_TBL_0006; table_name=docx_table_6; sheet_name=; page_no=None; row_start=1; row_end=9",
+          "similarity_score": 0.6444283944201007,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000008_CHUNK_000012",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_12",
+          "source_reference": "source_type=extracted_text; extracted_text_id=26; page_no=12; section_heading=slide_12",
+          "similarity_score": 0.589119688323012,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000001_CHUNK_000013",
+          "document_id": "DOC_000001",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "table: pdf_page_11_table_1",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000001_TBL_0001; table_name=pdf_page_11_table_1; sheet_name=; page_no=11; row_start=1; row_end=7",
+          "similarity_score": 0.5864097990171863,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000014_CHUNK_000002",
+          "document_id": "DOC_000014",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "docx_document_text",
+          "source_reference": "source_type=extracted_text; extracted_text_id=28; page_no=None; section_heading=docx_document_text",
+          "similarity_score": 0.5835319632148286,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T05_FINANCIAL_METRICS_INCONSISTENCIES",
+      "sow_area": "5.1 Inconsistency Detection + 5.5 Financial Challenge",
+      "query": "main financial metrics returns project cost project IRR equity IRR NPV minimum DSCR EV EBITDA debt total cost year one revenue metrics differ deck memo workbook",
+      "corpus_zone_filter": "client_data",
+      "status": "PASS",
+      "failure_details": [],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000014_CHUNK_000006",
+          "document_id": "DOC_000014",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "table: docx_table_4",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000014_TBL_0004; table_name=docx_table_4; sheet_name=; page_no=None; row_start=1; row_end=9",
+          "similarity_score": 0.6164570947087252,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000016_CHUNK_000002",
+          "document_id": "DOC_000016",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "table: Synthetic_Project_Helios_Financial_Assumptions_Assumptions",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000016_TBL_0002; table_name=Synthetic_Project_Helios_Financial_Assumptions_Assumptions; sheet_name=Assumptions; page_no=None; row_start=2; row_end=21",
+          "similarity_score": 0.601325742302746,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000008_CHUNK_000007",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_7",
+          "source_reference": "source_type=extracted_text; extracted_text_id=21; page_no=7; section_heading=slide_7",
+          "similarity_score": 0.5611685323829875,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000016_CHUNK_000001",
+          "document_id": "DOC_000016",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "table: Synthetic_Project_Helios_Financial_Assumptions_Summary",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000016_TBL_0001; table_name=Synthetic_Project_Helios_Financial_Assumptions_Summary; sheet_name=Summary; page_no=None; row_start=1; row_end=19",
+          "similarity_score": 0.5472965580678973,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000016_CHUNK_000003",
+          "document_id": "DOC_000016",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "table: Synthetic_Project_Helios_Financial_Assumptions_Assumptions",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000016_TBL_0002; table_name=Synthetic_Project_Helios_Financial_Assumptions_Assumptions; sheet_name=Assumptions; page_no=None; row_start=22; row_end=24",
+          "similarity_score": 0.5220216950551649,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T06_SENSITIVITY_DOWNSIDE",
+      "sow_area": "5.3 Historical IC Themes + 5.4 Downside Protection",
+      "query": "sensitivity results downside cases merchant price generation capex COD delay FX depreciation combined downside BESS degradation augmentation equity IRR minimum DSCR included in submission",
+      "corpus_zone_filter": "client_data",
+      "status": "PASS",
+      "failure_details": [],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000016_CHUNK_000007",
+          "document_id": "DOC_000016",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "table: Synthetic_Project_Helios_Financial_Assumptions_Sensitivities",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000016_TBL_0005; table_name=Synthetic_Project_Helios_Financial_Assumptions_Sensitivities; sheet_name=Sensitivities; page_no=None; row_start=2; row_end=10",
+          "similarity_score": 0.675642973522193,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000008_CHUNK_000010",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_10",
+          "source_reference": "source_type=extracted_text; extracted_text_id=24; page_no=10; section_heading=slide_10",
+          "similarity_score": 0.6608160394034576,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000001_CHUNK_000010",
+          "document_id": "DOC_000001",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "page_10",
+          "source_reference": "source_type=extracted_text; extracted_text_id=11; page_no=10; section_heading=page_10",
+          "similarity_score": 0.6239249462356553,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000014_CHUNK_000002",
+          "document_id": "DOC_000014",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "docx_document_text",
+          "source_reference": "source_type=extracted_text; extracted_text_id=28; page_no=None; section_heading=docx_document_text",
+          "similarity_score": 0.6062662876721872,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000008_CHUNK_000012",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_12",
+          "source_reference": "source_type=extracted_text; extracted_text_id=26; page_no=12; section_heading=slide_12",
+          "similarity_score": 0.593821509534031,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T07_MARKET_OFFTAKE_REVENUE",
+      "sow_area": "Market, Offtake and Revenue Assumptions",
+      "query": "market offtake revenue assumptions contracted share merchant share PPA price merchant price BESS revenue payment security offtaker credit merchant curve revenue projection EBITDA",
+      "corpus_zone_filter": "client_data",
+      "status": "PASS",
+      "failure_details": [],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000008_CHUNK_000006",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_6",
+          "source_reference": "source_type=extracted_text; extracted_text_id=20; page_no=6; section_heading=slide_6",
+          "similarity_score": 0.6870096324553053,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000001_CHUNK_000006",
+          "document_id": "DOC_000001",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "page_6",
+          "source_reference": "source_type=extracted_text; extracted_text_id=7; page_no=6; section_heading=page_6",
+          "similarity_score": 0.620296971064055,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000008_CHUNK_000012",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_12",
+          "source_reference": "source_type=extracted_text; extracted_text_id=26; page_no=12; section_heading=slide_12",
+          "similarity_score": 0.5549646314653113,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000016_CHUNK_000002",
+          "document_id": "DOC_000016",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "table: Synthetic_Project_Helios_Financial_Assumptions_Assumptions",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000016_TBL_0002; table_name=Synthetic_Project_Helios_Financial_Assumptions_Assumptions; sheet_name=Assumptions; page_no=None; row_start=2; row_end=21",
+          "similarity_score": 0.534162404866702,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000008_CHUNK_000008",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_8",
+          "source_reference": "source_type=extracted_text; extracted_text_id=22; page_no=8; section_heading=slide_8",
+          "similarity_score": 0.5293176546281528,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T08_VALUATION_CLIENT_SIDE",
+      "sow_area": "5.5 Valuation and Client-Side Benchmark Challenge",
+      "query": "valuation assumptions NPV EV EBITDA enterprise value first full year EBITDA discount rate cost per MW BESS equipment grid interconnection overhead contingency benchmark",
+      "corpus_zone_filter": "client_data",
+      "status": "PASS",
+      "failure_details": [],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000008_CHUNK_000008",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_8",
+          "source_reference": "source_type=extracted_text; extracted_text_id=22; page_no=8; section_heading=slide_8",
+          "similarity_score": 0.5817028615103466,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000001_CHUNK_000008",
+          "document_id": "DOC_000001",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "page_8",
+          "source_reference": "source_type=extracted_text; extracted_text_id=9; page_no=8; section_heading=page_8",
+          "similarity_score": 0.5514145912147564,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000008_CHUNK_000006",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_6",
+          "source_reference": "source_type=extracted_text; extracted_text_id=20; page_no=6; section_heading=slide_6",
+          "similarity_score": 0.5456130025049698,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000014_CHUNK_000002",
+          "document_id": "DOC_000014",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "docx_document_text",
+          "source_reference": "source_type=extracted_text; extracted_text_id=28; page_no=None; section_heading=docx_document_text",
+          "similarity_score": 0.5442238743492568,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000004_CHUNK_000003",
+          "document_id": "DOC_000004",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "table: docx_table_2",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000004_TBL_0002; table_name=docx_table_2; sheet_name=; page_no=None; row_start=1; row_end=7",
+          "similarity_score": 0.5365129437454801,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T09_EXTERNAL_COST_BENCHMARK",
+      "sow_area": "5.5 Benchmark Analysis from Whitelisted Sources",
+      "query": "utility scale PV plus battery overnight capital cost grid connection cost fixed operating expense variable operating expense battery storage solar PV benchmark",
+      "corpus_zone_filter": "corpus_data",
+      "status": "PASS",
+      "failure_details": [],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000072_CHUNK_000885",
+          "document_id": "DOC_000072",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "table: 2024_v3_Workbook_Corrected_04_02_2025_Solar - PV Dist. Res",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000072_TBL_0010; table_name=2024_v3_Workbook_Corrected_04_02_2025_Solar - PV Dist. Res; sheet_name=Solar - PV Dist. Res; page_no=None; row_start=404; row_end=439",
+          "similarity_score": 0.6635002149761199,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000072_CHUNK_001656",
+          "document_id": "DOC_000072",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "table: 2024_v3_Workbook_Corrected_04_02_2025_Utility-Scale PV-Plus-Battery",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000072_TBL_0024; table_name=2024_v3_Workbook_Corrected_04_02_2025_Utility-Scale PV-Plus-Battery; sheet_name=Utility-Scale PV-Plus-Battery; page_no=None; row_start=541; row_end=805",
+          "similarity_score": 0.6607286858245784,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000072_CHUNK_000788",
+          "document_id": "DOC_000072",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "table: 2024_v3_Workbook_Corrected_04_02_2025_Solar - PV Dist. Comm",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000072_TBL_0009; table_name=2024_v3_Workbook_Corrected_04_02_2025_Solar - PV Dist. Comm; sheet_name=Solar - PV Dist. Comm; page_no=None; row_start=404; row_end=425",
+          "similarity_score": 0.6570001341001189,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000072_CHUNK_000691",
+          "document_id": "DOC_000072",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "table: 2024_v3_Workbook_Corrected_04_02_2025_Solar - Utility PV",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000072_TBL_0008; table_name=2024_v3_Workbook_Corrected_04_02_2025_Solar - Utility PV; sheet_name=Solar - Utility PV; page_no=None; row_start=437; row_end=701",
+          "similarity_score": 0.65453697676551,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000072_CHUNK_001482",
+          "document_id": "DOC_000072",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "table: 2024_v3_Workbook_Corrected_04_02_2025_Commercial Battery Storage",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000072_TBL_0022; table_name=2024_v3_Workbook_Corrected_04_02_2025_Commercial Battery Storage; sheet_name=Commercial Battery Storage; page_no=None; row_start=250; row_end=255",
+          "similarity_score": 0.6506042866709244,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T10_EXTERNAL_EV_EBITDA_BENCHMARK",
+      "sow_area": "5.5 EV/EBITDA / Valuation Multiple Benchmark",
+      "query": "renewable energy solar storage EV EBITDA enterprise value valuation multiple transaction benchmark comparable transactions listed company multiples",
+      "corpus_zone_filter": "corpus_data",
+      "status": "FAIL",
+      "failure_details": [
+        "Missing expected evidence term group. At least one of these terms was expected: ['EV / EBITDA', 'EV EBITDA']",
+        "Missing expected evidence term group. At least one of these terms was expected: ['enterprise value']",
+        "Missing expected evidence term group. At least one of these terms was expected: ['transaction benchmark', 'comparable transaction', 'listed company']",
+        "EV/EBITDA valuation benchmark evidence was not found. The final report should not claim EV/EBITDA is externally benchmarked."
+      ],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000085_CHUNK_000270",
+          "document_id": "DOC_000085",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "01_RAG_Public_Deal_Documents",
+          "section_heading": "html_document",
+          "source_reference": "source_type=extracted_text; extracted_text_id=36; page_no=None; section_heading=html_document",
+          "similarity_score": 0.5281206760689072,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000072_CHUNK_000788",
+          "document_id": "DOC_000072",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "table: 2024_v3_Workbook_Corrected_04_02_2025_Solar - PV Dist. Comm",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000072_TBL_0009; table_name=2024_v3_Workbook_Corrected_04_02_2025_Solar - PV Dist. Comm; sheet_name=Solar - PV Dist. Comm; page_no=None; row_start=404; row_end=425",
+          "similarity_score": 0.5085110061198852,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000072_CHUNK_000885",
+          "document_id": "DOC_000072",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "table: 2024_v3_Workbook_Corrected_04_02_2025_Solar - PV Dist. Res",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000072_TBL_0010; table_name=2024_v3_Workbook_Corrected_04_02_2025_Solar - PV Dist. Res; sheet_name=Solar - PV Dist. Res; page_no=None; row_start=404; row_end=439",
+          "similarity_score": 0.5056177933010758,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000159_CHUNK_000043",
+          "document_id": "DOC_000159",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "01_RAG_Public_Deal_Documents",
+          "section_heading": "html_document",
+          "source_reference": "source_type=extracted_text; extracted_text_id=1271; page_no=None; section_heading=html_document",
+          "similarity_score": 0.4954018105697866,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000072_CHUNK_001514",
+          "document_id": "DOC_000072",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "table: 2024_v3_Workbook_Corrected_04_02_2025_Residential Battery Storage",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000072_TBL_0023; table_name=2024_v3_Workbook_Corrected_04_02_2025_Residential Battery Storage; sheet_name=Residential Battery Storage; page_no=None; row_start=154; row_end=173",
+          "similarity_score": 0.49433070619603137,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T11_CONDITIONS_PRECEDENT_OPEN_ITEMS",
+      "sow_area": "5.1 Readiness + 6.1 Output Open Items",
+      "query": "conditions precedent open items final investment approval metric reconciliation merchant price offtaker credit combined downside BESS augmentation grid overhead advisory land permit cyber decommissioning actions",
+      "corpus_zone_filter": "client_data",
+      "status": "PASS",
+      "failure_details": [],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000008_CHUNK_000012",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_12",
+          "source_reference": "source_type=extracted_text; extracted_text_id=26; page_no=12; section_heading=slide_12",
+          "similarity_score": 0.7095771955758863,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000001_CHUNK_000012",
+          "document_id": "DOC_000001",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "page_12",
+          "source_reference": "source_type=extracted_text; extracted_text_id=13; page_no=12; section_heading=page_12",
+          "similarity_score": 0.6314892495129616,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000014_CHUNK_000002",
+          "document_id": "DOC_000014",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "docx_document_text",
+          "source_reference": "source_type=extracted_text; extracted_text_id=28; page_no=None; section_heading=docx_document_text",
+          "similarity_score": 0.621904652476079,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000008_CHUNK_000008",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_8",
+          "source_reference": "source_type=extracted_text; extracted_text_id=22; page_no=8; section_heading=slide_8",
+          "similarity_score": 0.6066606658916329,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000001_CHUNK_000011",
+          "document_id": "DOC_000001",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "page_11",
+          "source_reference": "source_type=extracted_text; extracted_text_id=12; page_no=11; section_heading=page_11",
+          "similarity_score": 0.5865232015022206,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T12_PREVIOUS_REQUEST_ACCOMMODATION",
+      "sow_area": "5.1 Previous Request Accommodation",
+      "query": "previous request missing data accommodated prior IC request follow up action previously requested included in current memo not accommodated",
+      "corpus_zone_filter": null,
+      "status": "FAIL",
+      "failure_details": [
+        "Missing expected evidence term group. At least one of these terms was expected: ['previous request', 'prior request', 'previously requested']",
+        "Missing expected evidence term group. At least one of these terms was expected: ['accommodated', 'not accommodated', 'partially accommodated']",
+        "Missing expected evidence term group. At least one of these terms was expected: ['follow-up', 'follow up', 'follow up action']",
+        "Previous request accommodation cannot be tested from current corpus. Load prior request / follow-up logs or create a tracking table."
+      ],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000057_CHUNK_000038",
+          "document_id": "DOC_000057",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "json_document",
+          "source_reference": "source_type=extracted_text; extracted_text_id=32; page_no=None; section_heading=json_document",
+          "similarity_score": 0.35399882993741516,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000060_CHUNK_000095",
+          "document_id": "DOC_000060",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "json_document",
+          "source_reference": "source_type=extracted_text; extracted_text_id=33; page_no=None; section_heading=json_document",
+          "similarity_score": 0.3508250218507607,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000053_CHUNK_001256",
+          "document_id": "DOC_000053",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "json_document",
+          "source_reference": "source_type=extracted_text; extracted_text_id=31; page_no=None; section_heading=json_document",
+          "similarity_score": 0.3493369063076228,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000053_CHUNK_001133",
+          "document_id": "DOC_000053",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "json_document",
+          "source_reference": "source_type=extracted_text; extracted_text_id=31; page_no=None; section_heading=json_document",
+          "similarity_score": 0.34717932550989505,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000061_CHUNK_000093",
+          "document_id": "DOC_000061",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "json_document",
+          "source_reference": "source_type=extracted_text; extracted_text_id=34; page_no=None; section_heading=json_document",
+          "similarity_score": 0.3465235229078929,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T13_PRIOR_DEAL_COMPARISON",
+      "sow_area": "5.5 Historical Deal Comparison",
+      "query": "comparable prior investments historical deal comparison similarities differences prior renewable investments platform solar storage wind BESS geography stage",
+      "corpus_zone_filter": null,
+      "status": "FAIL",
+      "failure_details": [
+        "Missing expected evidence term group. At least one of these terms was expected: ['comparable', 'similarities', 'differences']",
+        "Missing expected evidence term group. At least one of these terms was expected: ['prior investment', 'historical deal', 'previous transaction']",
+        "Comparable prior-deal evidence was not found. Load historical transaction metadata or prior IC materials."
+      ],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000085_CHUNK_000270",
+          "document_id": "DOC_000085",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "01_RAG_Public_Deal_Documents",
+          "section_heading": "html_document",
+          "source_reference": "source_type=extracted_text; extracted_text_id=36; page_no=None; section_heading=html_document",
+          "similarity_score": 0.59785080053391,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000085_CHUNK_000271",
+          "document_id": "DOC_000085",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "01_RAG_Public_Deal_Documents",
+          "section_heading": "html_document",
+          "source_reference": "source_type=extracted_text; extracted_text_id=36; page_no=None; section_heading=html_document",
+          "similarity_score": 0.5746020869859875,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000159_CHUNK_000033",
+          "document_id": "DOC_000159",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "01_RAG_Public_Deal_Documents",
+          "section_heading": "html_document",
+          "source_reference": "source_type=extracted_text; extracted_text_id=1271; page_no=None; section_heading=html_document",
+          "similarity_score": 0.5596866559868955,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000159_CHUNK_000029",
+          "document_id": "DOC_000159",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "01_RAG_Public_Deal_Documents",
+          "section_heading": "html_document",
+          "source_reference": "source_type=extracted_text; extracted_text_id=1271; page_no=None; section_heading=html_document",
+          "similarity_score": 0.5526544555543494,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000085_CHUNK_000272",
+          "document_id": "DOC_000085",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "01_RAG_Public_Deal_Documents",
+          "section_heading": "html_document",
+          "source_reference": "source_type=extracted_text; extracted_text_id=36; page_no=None; section_heading=html_document",
+          "similarity_score": 0.5481924496892421,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T14_MACRO_FX_GDP_DATA",
+      "sow_area": "2 Scope - Macro / FX / GDP Data",
+      "query": "Thailand macroeconomic data FX projections exchange rate GDP growth inflation renewable energy market country risk",
+      "corpus_zone_filter": null,
+      "status": "FAIL",
+      "failure_details": [
+        "Missing expected evidence term group. At least one of these terms was expected: ['FX', 'exchange rate', 'currency']",
+        "Missing expected evidence term group. At least one of these terms was expected: ['GDP', 'GDP growth']",
+        "Missing expected evidence term group. At least one of these terms was expected: ['inflation', 'macroeconomic', 'macro']",
+        "Missing expected evidence term group. At least one of these terms was expected: ['country risk', 'market risk']",
+        "Macro / FX / GDP evidence was not found. Load macro datasets or connect a whitelisted macro source."
+      ],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000081_CHUNK_000265",
+          "document_id": "DOC_000081",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "table: WorldBank_PPI_Energy_Renewables_2000_2024_CustomQuery",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000081_TBL_0001; table_name=WorldBank_PPI_Energy_Renewables_2000_2024_CustomQuery; sheet_name=CustomQuery; page_no=None; row_start=755; row_end=756",
+          "similarity_score": 0.5572642437379786,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000081_CHUNK_000301",
+          "document_id": "DOC_000081",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "table: WorldBank_PPI_Energy_Renewables_2000_2024_CustomQuery",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000081_TBL_0001; table_name=WorldBank_PPI_Energy_Renewables_2000_2024_CustomQuery; sheet_name=CustomQuery; page_no=None; row_start=850; row_end=851",
+          "similarity_score": 0.5463376554138741,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000081_CHUNK_000300",
+          "document_id": "DOC_000081",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "table: WorldBank_PPI_Energy_Renewables_2000_2024_CustomQuery",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000081_TBL_0001; table_name=WorldBank_PPI_Energy_Renewables_2000_2024_CustomQuery; sheet_name=CustomQuery; page_no=None; row_start=848; row_end=849",
+          "similarity_score": 0.5459271654696811,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000081_CHUNK_000266",
+          "document_id": "DOC_000081",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "table: WorldBank_PPI_Energy_Renewables_2000_2024_CustomQuery",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000081_TBL_0001; table_name=WorldBank_PPI_Energy_Renewables_2000_2024_CustomQuery; sheet_name=CustomQuery; page_no=None; row_start=757; row_end=759",
+          "similarity_score": 0.5456072265156443,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000081_CHUNK_000299",
+          "document_id": "DOC_000081",
+          "corpus_zone": "corpus_data",
+          "corpus_pack": "02_Benchmark_and_Market_Data",
+          "section_heading": "table: WorldBank_PPI_Energy_Renewables_2000_2024_CustomQuery",
+          "source_reference": "source_type=extracted_table_rows; table_id=DOC_000081_TBL_0001; table_name=WorldBank_PPI_Energy_Renewables_2000_2024_CustomQuery; sheet_name=CustomQuery; page_no=None; row_start=845; row_end=847",
+          "similarity_score": 0.5423642977031045,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    },
+    {
+      "test_id": "T15_TRACEABILITY",
+      "sow_area": "6.2 Traceability",
+      "query": "financial metrics returns risks conditions merchant price offtaker credit sensitivity project cost PPA price BESS grid permit",
+      "corpus_zone_filter": "client_data",
+      "status": "PASS",
+      "failure_details": [],
+      "results_returned": 15,
+      "best_chunks": [
+        {
+          "chunk_id": "DOC_000008_CHUNK_000006",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_6",
+          "source_reference": "source_type=extracted_text; extracted_text_id=20; page_no=6; section_heading=slide_6",
+          "similarity_score": 0.6415321534486718,
+          "hybrid_score": 0.01639344262295082,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000014_CHUNK_000002",
+          "document_id": "DOC_000014",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "docx_document_text",
+          "source_reference": "source_type=extracted_text; extracted_text_id=28; page_no=None; section_heading=docx_document_text",
+          "similarity_score": 0.6242827815856926,
+          "hybrid_score": 0.016129032258064516,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000008_CHUNK_000012",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_12",
+          "source_reference": "source_type=extracted_text; extracted_text_id=26; page_no=12; section_heading=slide_12",
+          "similarity_score": 0.6122862604555759,
+          "hybrid_score": 0.015873015873015872,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000001_CHUNK_000006",
+          "document_id": "DOC_000001",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "page_6",
+          "source_reference": "source_type=extracted_text; extracted_text_id=7; page_no=6; section_heading=page_6",
+          "similarity_score": 0.5992332723361553,
+          "hybrid_score": 0.015625,
+          "keyword_score": null
+        },
+        {
+          "chunk_id": "DOC_000008_CHUNK_000008",
+          "document_id": "DOC_000008",
+          "corpus_zone": "client_data",
+          "corpus_pack": "TXN_HELIOS_001",
+          "section_heading": "slide_8",
+          "source_reference": "source_type=extracted_text; extracted_text_id=22; page_no=8; section_heading=slide_8",
+          "similarity_score": 0.5845873525245577,
+          "hybrid_score": 0.015384615384615385,
+          "keyword_score": null
+        }
+      ]
+    }
+  ]
+}

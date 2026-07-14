@@ -1,0 +1,7 @@
+﻿Finding_ID,Transaction_ID,Finding_Type,Cost_Lines,Current_Cost_USD_mn,Estimated_Saving_USD_mn,Rationale,Expected_Confidence
+COST-OPT-001,TXN_HELIOS_001,Potential duplicate,Legal due diligence; Transaction legal advisory,3.9,1.0,Overlapping legal workstreams should be consolidated under one scope and fee cap.,High
+COST-OPT-002,TXN_HELIOS_001,Potential duplicate,Owner's engineer; Technical advisory,5.4,1.2,"Technical scopes overlap on design review, EPC monitoring and acceptance testing.",Medium
+COST-OPT-003,TXN_HELIOS_001,Cluster outlier,Corporate/platform overhead,12.0,4.0,Allocation is materially above peer-cluster median and should be challenged or capped.,High
+COST-OPT-004,TXN_HELIOS_001,Cluster outlier,EPC contingency,18.0,3.0,Contingency is high for the stated fixed-price EPC structure; reconcile against residual risk register.,Medium
+COST-OPT-005,TXN_HELIOS_001,Benchmark challenge,Grid interconnection,25.0,2.0,Grid cost is above comparable solar+BESS projects; validate reinforcement scope and utility contributions.,Medium
+COST-OPT-006,TXN_HELIOS_001,Benchmark challenge,BESS equipment,52.0,2.5,Cost is upper-quartile versus the synthetic peer set; seek firm supplier bids and augmentation alternatives.,Medium
