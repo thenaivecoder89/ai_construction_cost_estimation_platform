@@ -4,7 +4,98 @@
 
 from pathlib import Path
 import os
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    def load_dotenv():
+        return False
+
+BOK_CORPUS_FOLDERS = [
+    "BOK-001",
+    "BOK-002",
+    "BOK-004",
+    "BOK-005",
+    "BOK-006",
+    "BOK-007",
+    "BOK-008",
+    "BOK-009",
+    "BOK-010",
+    "BOK-011",
+    "BOK-012",
+    "BOK-013",
+    "BOK-014",
+    "BOK-015",
+    "BOK-016",
+    "BOK-018",
+    "BOK-019",
+    "BOK-020",
+    "BOK-021",
+    "BOK-022",
+    "BOK-024",
+    "BOK-025",
+    "BOK-030",
+    "BOK-031",
+    "BOK-033",
+    "BOK-035",
+    "BOK-036",
+    "BOK-037",
+    "BOK-038",
+    "BOK-040",
+    "BOK-041",
+    "BOK-042",
+    "BOK-045",
+    "BOK-046",
+]
+
+CDB_CORPUS_FOLDERS = [
+    "CDB-005",
+    "CDB-006",
+    "CDB-010",
+    "CDB-011",
+    "CDB-012",
+    "CDB-013",
+    "CDB-014",
+    "CDB-015",
+    "CDB-016",
+    "CDB-017",
+    "CDB-018",
+    "CDB-019",
+    "CDB-021",
+    "CDB-022",
+    "CDB-023",
+    "CDB-024",
+    "CDB-025",
+]
+
+CORPUS_ALLOWED_FOLDER_MAP = {
+    "BOK": BOK_CORPUS_FOLDERS,
+    "CDB": CDB_CORPUS_FOLDERS,
+}
+
+
+def is_allowed_corpus_relative_path(relative_path):
+    parts = Path(relative_path).parts
+    if len(parts) < 2:
+        return False
+
+    corpus_pack = parts[0]
+    corpus_folder = parts[1]
+
+    return corpus_folder in CORPUS_ALLOWED_FOLDER_MAP.get(corpus_pack, [])
+
+
+def is_allowed_project_corpus_path(relative_path):
+    parts = Path(relative_path).parts
+    if "corpus" not in parts:
+        return False
+
+    corpus_index = parts.index("corpus")
+    corpus_relative_parts = parts[corpus_index + 1:]
+    if len(corpus_relative_parts) < 2:
+        return False
+
+    return is_allowed_corpus_relative_path(Path(*corpus_relative_parts))
+
 
 def config_base():
     # Database
@@ -49,7 +140,7 @@ def config_base():
     # Runtime
     default_currency = "AED"
     default_jurisdiction = "UAE"
-    project_name = "AI Investment RAG"
+    project_name = "AI Construction Cost Estimation Platform"
     
     # Function return
     return_pack = {
@@ -77,7 +168,7 @@ def config_base():
 def config_paths(client_data: str):
     # Project paths
     project_root = Path(__file__).resolve().parent.parent
-    corpus_dir =  project_root / "corpus"
+    corpus_dir = Path(os.getenv("CORPUS_DIR", project_root / "corpus")).expanduser()
     client_data_dir = project_root / "client_data"
     output_dir = project_root / "output"
     draft_report_dir = output_dir / "draft_report"
@@ -94,6 +185,21 @@ def config_paths(client_data: str):
         "body_of_knowledge": corpus_dir / "BOK",
         "cost_database": corpus_dir / "CDB"
     }
+
+    corpus_allowed_folders = CORPUS_ALLOWED_FOLDER_MAP
+    corpus_scan_dirs = []
+    for pack_name, folder_names in corpus_allowed_folders.items():
+        for folder_name in folder_names:
+            corpus_scan_dirs.append(corpus_dir / pack_name / folder_name)
+
+    firebase_storage_bucket = os.getenv(
+        "FIREBASE_STORAGE_BUCKET",
+        "gs://ai-construction-cost-est.firebasestorage.app",
+    )
+    firebase_corpus_prefix = os.getenv(
+        "FIREBASE_CORPUS_PREFIX",
+        "corpus/ai_construction_cost_estimation_platform",
+    )
 
     # Client data packs
     client_data_packs = {
@@ -167,6 +273,10 @@ def config_paths(client_data: str):
         "extracted_text_dir": extracted_text_dir,
         "findings_register_dir": findings_register_dir,
         "corpus_packs": corpus_packs,
+        "corpus_allowed_folders": corpus_allowed_folders,
+        "corpus_scan_dirs": corpus_scan_dirs,
+        "firebase_storage_bucket": firebase_storage_bucket,
+        "firebase_corpus_prefix": firebase_corpus_prefix,
         "client_data_packs": client_data_packs,
         "exclude_from_rag": exclude_from_rag,
         "supported_file_types": supported_file_types,

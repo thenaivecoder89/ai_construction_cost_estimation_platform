@@ -237,6 +237,7 @@ def chunk_documents(rebuild_inventory: str = "Y"):
         JOIN documents d
             ON d.document_id = et.document_id
         WHERE d.index_in_rag = TRUE
+          AND d.workstream = 'ai_construction_cost_estimation_platform'
           AND et.text_content IS NOT NULL
           AND LENGTH(TRIM(et.text_content)) > 0
           {new_documents_filter}
@@ -271,6 +272,7 @@ def chunk_documents(rebuild_inventory: str = "Y"):
         JOIN documents d
             ON d.document_id = tr.document_id
         WHERE d.extraction_required = TRUE
+          AND d.workstream = 'ai_construction_cost_estimation_platform'
           {new_documents_filter}
         ORDER BY
             tr.document_id,

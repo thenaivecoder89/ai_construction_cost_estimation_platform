@@ -18,6 +18,7 @@
 # - This version avoids upstream errors by processing small batches per API call.
 
 import time
+import os
 import pandas as pd
 from sqlalchemy import create_engine, text
 from openai import OpenAI, RateLimitError
@@ -44,6 +45,28 @@ def clean_text(value):
 
 def vector_to_pgvector(embedding):
     return "[" + ",".join(str(float(x)) for x in embedding) + "]"
+
+
+def positive_int_env(name, default_value):
+    try:
+        value = int(os.getenv(name, default_value))
+        if value > 0:
+            return value
+    except Exception:
+        pass
+
+    return default_value
+
+
+def non_negative_float_env(name, default_value):
+    try:
+        value = float(os.getenv(name, default_value))
+        if value >= 0:
+            return value
+    except Exception:
+        pass
+
+    return default_value
 
 
 def check_chunks_ready(engine):
@@ -116,14 +139,15 @@ def embed_chunks(rebuild_inventory: str = "Y"):
 
     # Per OpenAI API request. Keep this below the per-run cap to reduce
     # rate-limit risk and make partial progress if a later batch is throttled.
-    batch_size = 100
+    batch_size = positive_int_env("EMBED_BATCH_SIZE", 100)
 
     # Each API call to /embed_chunks will process only this many batches.
     # Re-run the endpoint until remaining_chunks_without_embedding = 0.
-    max_batches_per_run = 10
+    max_batches_per_run = positive_int_env("EMBED_MAX_BATCHES_PER_RUN", 10)
 
     # Small pause between successful batches.
-    sleep_seconds_between_batches = 6
+    sleep_seconds_between_batches = non_negative_float_env("EMBED_SLEEP_SECONDS_BETWEEN_BATCHES", 6)
+    max_embedding_input_chars = positive_int_env("EMBED_MAX_INPUT_CHARS_PER_CHUNK", 8000)
 
     limit_chunks = batch_size * max_batches_per_run
 
@@ -182,9 +206,9 @@ def embed_chunks(rebuild_inventory: str = "Y"):
         for _, row in batch_df.iterrows():
             chunk_text = clean_text(row["chunk_text"])
 
-            # Safety cap. Your chunking is already around 1,000 tokens,
-            # so this should normally not cut anything.
-            chunk_text = chunk_text[:30000]
+            # Safety cap to keep each OpenAI embedding request under the
+            # model's aggregate token limit when a batch has long chunks.
+            chunk_text = chunk_text[:max_embedding_input_chars]
 
             input_texts.append(chunk_text.replace("\n", " "))
 
@@ -205,6 +229,7 @@ def embed_chunks(rebuild_inventory: str = "Y"):
                 "embedding_dimension": embedding_dimension,
                 "chunks_per_openai_request": batch_size,
                 "max_chunks_per_endpoint_run": limit_chunks,
+                "max_embedding_input_chars_per_chunk": max_embedding_input_chars,
                 "remaining_chunks_before_run": remaining_before,
                 "chunks_selected_this_run": int(chunks_selected_this_run),
                 "chunks_embedded_this_run": int(chunks_embedded),
@@ -256,6 +281,7 @@ def embed_chunks(rebuild_inventory: str = "Y"):
         "chunks_per_openai_request": batch_size,
         "max_batches_per_run": max_batches_per_run,
         "max_chunks_per_endpoint_run": limit_chunks,
+        "max_embedding_input_chars_per_chunk": max_embedding_input_chars,
         "remaining_chunks_before_run": remaining_before,
         "chunks_selected_this_run": int(chunks_selected_this_run),
         "chunks_embedded_this_run": int(chunks_embedded),

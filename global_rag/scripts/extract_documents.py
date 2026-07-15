@@ -16,6 +16,7 @@
 
 from pathlib import Path
 import json
+import os
 
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -131,7 +132,7 @@ def sync_documents_from_inventory(engine):
                     document_id,
                     source_group AS corpus_zone,
                     corpus_pack,
-                    'investment_ai_poc' AS workstream,
+                    'ai_construction_cost_estimation_platform' AS workstream,
                     source_group AS source_folder,
                     relative_path,
                     file_name,
@@ -198,6 +199,7 @@ def extract_documents(client_data: str, rebuild_inventory: str = "Y"):
         url=config_base["db_url"],
         pool_pre_ping=True
     )
+    extract_pdf_tables = os.getenv("EXTRACT_PDF_TABLES", "N").strip().upper() == "Y"
 
     # Important: extracted_text / extracted_tables depend on documents.document_id
     sync_documents_from_inventory(engine)
@@ -215,6 +217,12 @@ def extract_documents(client_data: str, rebuild_inventory: str = "Y"):
     """
 
     inventory_df = pd.read_sql(text(inventory_sql), engine)
+    if not inventory_df.empty:
+        corpus_rows = inventory_df["source_group"].astype(str) == "corpus_data"
+        allowed_corpus_rows = inventory_df["relative_path"].astype(str).apply(
+            config.is_allowed_project_corpus_path
+        )
+        inventory_df = inventory_df[(~corpus_rows) | allowed_corpus_rows].copy()
 
     documents_processed = 0
     documents_failed = 0
@@ -287,47 +295,48 @@ def extract_documents(client_data: str, rebuild_inventory: str = "Y"):
                         }
                     )
 
-                    try:
-                        detected_tables = page.find_tables()
+                    if extract_pdf_tables:
+                        try:
+                            detected_tables = page.find_tables()
 
-                        for detected_table in detected_tables.tables:
-                            table_grid = detected_table.extract()
+                            for detected_table in detected_tables.tables:
+                                table_grid = detected_table.extract()
 
-                            if table_grid and len(table_grid) > 0:
-                                df = pd.DataFrame(table_grid)
-                                df = clean_dataframe(df)
+                                if table_grid and len(table_grid) > 0:
+                                    df = pd.DataFrame(table_grid)
+                                    df = clean_dataframe(df)
 
-                                table_id = f"{document_id}_TBL_{table_counter:04d}"
+                                    table_id = f"{document_id}_TBL_{table_counter:04d}"
 
-                                table_rows.append(
-                                    {
-                                        "table_id": table_id,
-                                        "document_id": document_id,
-                                        "table_name": f"pdf_page_{page_no}_table_{table_counter}",
-                                        "sheet_name": None,
-                                        "page_no": page_no,
-                                        "extracted_file_path": str(file_path),
-                                        "row_count": len(df),
-                                        "column_count": len(df.columns),
-                                        "extraction_method": "pymupdf_find_tables",
-                                        "extraction_quality": "table_extracted",
-                                        "notes": "PDF table extracted using PyMuPDF page.find_tables().",
-                                    }
-                                )
-
-                                table_data_rows.extend(
-                                    dataframe_to_jsonb_rows(
-                                        table_id=table_id,
-                                        document_id=document_id,
-                                        sheet_name=None,
-                                        df=df,
+                                    table_rows.append(
+                                        {
+                                            "table_id": table_id,
+                                            "document_id": document_id,
+                                            "table_name": f"pdf_page_{page_no}_table_{table_counter}",
+                                            "sheet_name": None,
+                                            "page_no": page_no,
+                                            "extracted_file_path": str(file_path),
+                                            "row_count": len(df),
+                                            "column_count": len(df.columns),
+                                            "extraction_method": "pymupdf_find_tables",
+                                            "extraction_quality": "table_extracted",
+                                            "notes": "PDF table extracted using PyMuPDF page.find_tables().",
+                                        }
                                     )
-                                )
 
-                                table_counter += 1
+                                    table_data_rows.extend(
+                                        dataframe_to_jsonb_rows(
+                                            table_id=table_id,
+                                            document_id=document_id,
+                                            sheet_name=None,
+                                            df=df,
+                                        )
+                                    )
 
-                    except Exception:
-                        pass
+                                    table_counter += 1
+
+                        except Exception:
+                            pass
 
                 pdf_doc.close()
 

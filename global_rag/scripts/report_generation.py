@@ -37,8 +37,8 @@ import global_rag.scripts.retrieve_chunks as ret
 # Constants
 # ---------------------------------------------------------------------
 
-REPORT_GENERATION_VERSION = "report_generation_stage2_asset_overlay_v1"
-REPORT_TYPE = "ai_first_line_ic_review"
+REPORT_GENERATION_VERSION = "construction_cost_estimation_report_v1"
+REPORT_TYPE = "ai_construction_cost_estimation_review"
 CLASSIFICATION = "Confidential External"
 
 STATUS_GREEN = "Green"
@@ -4039,16 +4039,17 @@ def generate_llm_executive_summary(config_base, report_core):
         }
 
     prompt = f"""
-You are preparing an AI first-line Investment Committee review summary.
+You are preparing an AI-assisted construction cost-estimation review summary.
 
 Rules:
 - Do not write a market research report.
-- Do not make an investment recommendation.
+- Do not make a final cost opinion or professional certification.
 - Do not invent facts.
 - Use only the structured findings provided.
 - Clearly flag Grey areas as not assessed due to missing source/config data.
-- Focus on reviewer concerns, gaps, inconsistencies and follow-up questions.
-- Keep the summary concise and IC-review oriented.
+- Separate client-submitted evidence from BOK/CDB benchmark evidence.
+- Focus on estimate gaps, basis risks, scope/quantity assumptions, benchmark constraints, and estimator follow-up questions.
+- Keep the summary concise and construction-cost-review oriented.
 
 Structured findings:
 {json.dumps(report_core, ensure_ascii=False, indent=2)[:25000]}
@@ -4056,7 +4057,7 @@ Structured findings:
 Generate:
 1. One short executive paragraph.
 2. Top red/amber issues.
-3. Key IC follow-up questions.
+3. Key estimator follow-up questions.
 4. Data limitations.
 """
 
@@ -4083,7 +4084,7 @@ Generate:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You generate concise IC first-line review summaries from structured evidence.",
+                        "content": "You generate concise construction cost-estimation review summaries from structured evidence.",
                     },
                     {
                         "role": "user",
@@ -4577,6 +4578,12 @@ def generate_investment_ic_review_report(
     use_llm_summary=True,
     write_audit=True,
 ):
+    return generate_construction_cost_estimation_report(
+        project_id=transaction_id,
+        use_llm_summary=use_llm_summary,
+        write_audit=write_audit,
+    )
+
     config_pack = get_config_pack(client_data=transaction_id)
     config_base = config_pack["config_base"]
 
@@ -4745,10 +4752,599 @@ def generate_investment_ic_review_report(
     }
 
 
+def build_construction_retrieval_plan(project_id):
+    client_scope = {
+        "corpus_zone": "client_data",
+        "corpus_pack": project_id,
+    }
+
+    return {
+        "project_profile": [
+            {
+                "query": (
+                    f"{project_id} project scope location asset type gross floor area built up area "
+                    "procurement route design stage estimate class currency base date exclusions assumptions"
+                ),
+                **client_scope,
+                "top_k": 20,
+                "mode": "hybrid",
+                "max_chunk_chars": 10000,
+            }
+        ],
+        "estimate_completeness": [
+            {
+                "query": (
+                    "cost estimate completeness basis of estimate cost plan BOQ quantities rates "
+                    "measurement rules inclusions exclusions preliminaries overhead profit contingency taxes escalation"
+                ),
+                **client_scope,
+                "top_k": 20,
+                "mode": "hybrid",
+                "max_chunk_chars": 12000,
+            }
+        ],
+        "cost_metric_reconciliation": [
+            {
+                "query": (
+                    "total construction cost total project cost capex cost per square metre cost per sqft "
+                    "elemental cost plan BOQ summary package cost quantities rates currency base date"
+                ),
+                **client_scope,
+                "top_k": 25,
+                "mode": "hybrid",
+                "max_chunk_chars": 12000,
+            }
+        ],
+        "quantity_scope_assumptions": [
+            {
+                "query": (
+                    "quantity takeoff scope assumptions measurement exclusions design drawings specifications "
+                    "BIM area schedule GFA NIA BOQ measurement basis NRM CESMM POMI ICMS"
+                ),
+                **client_scope,
+                "top_k": 20,
+                "mode": "hybrid",
+                "max_chunk_chars": 10000,
+            }
+        ],
+        "external_benchmark_review": [
+            {
+                "query": (
+                    "construction cost benchmark cost database elemental rates building type location "
+                    "regional cost index construction market survey RICS ICMS NRM Spon Rawlinsons Turner Townsend Arcadis"
+                ),
+                "corpus_zone": "corpus_data",
+                "top_k": 30,
+                "mode": "hybrid",
+                "max_chunk_chars": 12000,
+            }
+        ],
+        "market_escalation_review": [
+            {
+                "query": (
+                    "construction cost inflation escalation material price index labour cost index commodity prices "
+                    "exchange rates UAE Dubai Abu Dhabi Saudi GCC inflation base date forecast"
+                ),
+                "corpus_zone": "corpus_data",
+                "top_k": 25,
+                "mode": "hybrid",
+                "max_chunk_chars": 12000,
+            }
+        ],
+        "risk_contingency_review": [
+            {
+                "query": (
+                    "estimate risk contingency optimism bias design development allowance provisional sums "
+                    "procurement risk ground conditions logistics programme schedule risk contractor market risk"
+                ),
+                **client_scope,
+                "top_k": 20,
+                "mode": "hybrid",
+                "max_chunk_chars": 10000,
+            }
+        ],
+        "open_items": [
+            {
+                "query": (
+                    "open items missing information assumptions exclusions qualifications clarifications "
+                    "pending design unresolved scope provisional sum to be confirmed"
+                ),
+                **client_scope,
+                "top_k": 20,
+                "mode": "hybrid",
+                "max_chunk_chars": 10000,
+            }
+        ],
+    }
+
+
+def run_construction_retrieval_plan(project_id):
+    evidence_packets = {}
+    for module_key, query_configs in build_construction_retrieval_plan(project_id).items():
+        module_results = []
+        retrieval_calls = []
+        for query_config in query_configs:
+            try:
+                retrieval_output = run_single_retrieval(query_config)
+                results = retrieval_output.get("results", [])
+                module_results.extend(results)
+                retrieval_calls.append(
+                    {
+                        "query": query_config["query"],
+                        "corpus_zone": query_config.get("corpus_zone"),
+                        "corpus_pack": query_config.get("corpus_pack"),
+                        "results_returned": len(results),
+                        "status": "ok",
+                    }
+                )
+            except Exception as e:
+                retrieval_calls.append(
+                    {
+                        "query": query_config["query"],
+                        "corpus_zone": query_config.get("corpus_zone"),
+                        "corpus_pack": query_config.get("corpus_pack"),
+                        "results_returned": 0,
+                        "status": "failed",
+                        "error": f"{type(e).__name__}: {str(e)}",
+                    }
+                )
+
+        selected_results = dedupe_results(module_results)[:12]
+        evidence_packets[module_key] = {
+            "retrieval_calls": retrieval_calls,
+            "raw_results_count": len(module_results),
+            "selected_results": selected_results,
+            "selected_sources": [get_source_reference(item) for item in selected_results],
+            "evidence_blob": get_evidence_blob(selected_results),
+        }
+
+    return evidence_packets
+
+
+def infer_construction_project_profile(project_id, evidence_packets):
+    profile_results = evidence_packets.get("project_profile", {}).get("selected_results", [])
+    blob = normalize_text(get_evidence_blob(profile_results))
+
+    project_types = {
+        "residential": ["residential", "apartment", "villa", "housing"],
+        "commercial": ["commercial", "office", "retail", "mixed use"],
+        "hospitality": ["hotel", "hospitality", "resort"],
+        "healthcare": ["hospital", "healthcare", "clinic"],
+        "industrial": ["industrial", "warehouse", "logistics"],
+        "infrastructure": ["infrastructure", "road", "bridge", "rail", "utility"],
+    }
+    estimate_stages = {
+        "concept": ["concept", "order of cost", "feasibility"],
+        "schematic_design": ["schematic", "stage 2", "stage 3"],
+        "detailed_design": ["detailed design", "stage 4", "tender"],
+        "post_tender": ["post tender", "contract award", "contract sum"],
+    }
+
+    project_type, project_type_score = infer_category(blob, project_types)
+    estimate_stage, estimate_stage_score = infer_category(blob, estimate_stages)
+
+    geography = infer_geography(blob)
+    if geography == "not_identified" and has_any(blob, ["dubai", "abu dhabi", "sharjah", "uae"]):
+        geography = "UAE"
+
+    confidence = "low"
+    if project_type_score > 0 and estimate_stage_score > 0:
+        confidence = "medium"
+    if project_type_score > 1 and estimate_stage_score > 1 and geography != "not_identified":
+        confidence = "high"
+
+    return {
+        "project_id": project_id,
+        "project_type": project_type,
+        "estimate_stage": estimate_stage,
+        "geography": geography,
+        "classification_confidence": confidence,
+        "source_chunks": [get_source_reference(item) for item in profile_results[:8]],
+    }
+
+
+def simple_module_assessment(module_name, evidence_packet, required_terms, weak_terms=None, missing_summary=None):
+    weak_terms = weak_terms or [
+        "missing",
+        "not included",
+        "not provided",
+        "to be confirmed",
+        "tbc",
+        "pending",
+        "excluded",
+        "provisional",
+    ]
+    results = evidence_packet.get("selected_results", [])
+    blob = get_evidence_blob(results)
+    evidence_found = has_any(blob, required_terms)
+    weak_found = has_any(blob, weak_terms)
+
+    if evidence_found and not weak_found:
+        traffic_light = STATUS_GREEN
+        summary = "Relevant evidence found and no obvious weak-evidence language was detected."
+    elif evidence_found and weak_found:
+        traffic_light = STATUS_AMBER
+        summary = "Relevant evidence found, but weak/open-item language was also detected."
+    else:
+        traffic_light = STATUS_RED
+        summary = missing_summary or "Required evidence was not found in selected source chunks."
+
+    return {
+        "module": module_name,
+        "traffic_light": traffic_light,
+        "summary": summary,
+        "evidence_found": evidence_found,
+        "weak_language_found": weak_found,
+        "source_chunks": find_source_chunks(results, required_terms + weak_terms, max_sources=8),
+        "evidence_extract": short_evidence_text(results, required_terms + weak_terms, max_chars=900),
+    }
+
+
+def extract_construction_cost_metrics(evidence_packets):
+    metric_terms = {
+        "total_construction_cost": ["total construction cost", "total project cost", "total cost", "contract sum"],
+        "cost_per_sqm": ["cost per sqm", "cost/m2", "cost per m2", "aed/m2", "usd/m2"],
+        "cost_per_sqft": ["cost per sqft", "cost/sqft", "aed/sqft", "usd/sqft"],
+        "contingency_pct": ["contingency"],
+        "escalation_pct": ["escalation", "inflation"],
+    }
+    results = evidence_packets.get("cost_metric_reconciliation", {}).get("selected_results", [])
+    rows = []
+    seen = set()
+    for result in results:
+        chunk_text = clean_text(result.get("chunk_text"))
+        row_texts = extract_row_texts(chunk_text) or [chunk_text]
+        for metric_key, terms in metric_terms.items():
+            for row_text in row_texts:
+                if not has_any(row_text, terms):
+                    continue
+                value = first_number_in_text(row_text)
+                if value is None:
+                    continue
+                signature = (metric_key, value, result.get("chunk_id"))
+                if signature in seen:
+                    continue
+                seen.add(signature)
+                rows.append(
+                    {
+                        "metric_key": metric_key,
+                        "metric_name": metric_key.replace("_", " ").title(),
+                        "value": value,
+                        "unit": infer_unit_from_text(row_text),
+                        "source_chunk": get_source_reference(result),
+                        "evidence_text": clean_text(row_text)[:500],
+                    }
+                )
+    return rows
+
+
+def run_construction_cost_reconciliation(evidence_packets):
+    metric_rows = extract_construction_cost_metrics(evidence_packets)
+    by_metric = {}
+    for row in metric_rows:
+        by_metric.setdefault(row["metric_key"], []).append(row)
+
+    reconciliation_table = []
+    for metric_key, rows in by_metric.items():
+        values = unique_float_values([row["value"] for row in rows])
+        traffic_light = STATUS_GREEN if len(values) == 1 else STATUS_AMBER
+        issue = "No inconsistency detected across retrieved values." if len(values) == 1 else "Multiple values found; estimator should reconcile source basis."
+        reconciliation_table.append(
+            {
+                "metric_key": metric_key,
+                "metric_name": rows[0]["metric_name"],
+                "values": values,
+                "traffic_light": traffic_light,
+                "issue": issue,
+                "source_chunks": dedupe_source_chunks([row["source_chunk"] for row in rows]),
+            }
+        )
+
+    module_status = STATUS_GREY
+    if reconciliation_table:
+        module_status = STATUS_AMBER if any(row["traffic_light"] == STATUS_AMBER for row in reconciliation_table) else STATUS_GREEN
+
+    return {
+        "module": "Cost Metric Reconciliation",
+        "traffic_light": module_status,
+        "summary": "Construction cost metrics are extracted from selected client evidence and checked for duplicate/conflicting values.",
+        "metric_rows_extracted": metric_rows,
+        "reconciliation_table": reconciliation_table,
+    }
+
+
+def run_construction_external_benchmark_review(evidence_packets):
+    benchmark_packet = evidence_packets.get("external_benchmark_review", {})
+    market_packet = evidence_packets.get("market_escalation_review", {})
+    benchmark_blob = benchmark_packet.get("evidence_blob", "")
+    market_blob = market_packet.get("evidence_blob", "")
+
+    benchmark_available = has_any(
+        benchmark_blob,
+        ["benchmark", "cost database", "market survey", "construction cost", "elemental", "rates", "rics", "icms", "nrm"],
+    )
+    escalation_available = has_any(
+        market_blob,
+        ["inflation", "escalation", "cost index", "price index", "commodity", "exchange rate", "material price"],
+    )
+
+    findings = [
+        {
+            "benchmark_area": "Cost benchmark corpus",
+            "traffic_light": STATUS_GREEN if benchmark_available else STATUS_GREY,
+            "finding": "External construction cost benchmark evidence was retrieved." if benchmark_available else "External construction cost benchmark evidence was not retrieved.",
+            "allowed_use": "Use only as directional benchmark support unless matched by building type, geography, base date and scope.",
+            "source_chunks": benchmark_packet.get("selected_sources", [])[:8] if benchmark_available else [],
+        },
+        {
+            "benchmark_area": "Market escalation and indices",
+            "traffic_light": STATUS_GREEN if escalation_available else STATUS_GREY,
+            "finding": "Construction inflation/escalation evidence was retrieved." if escalation_available else "Construction inflation/escalation evidence was not retrieved.",
+            "allowed_use": "Use for escalation challenge only where base date, location, currency and index basis are compatible.",
+            "source_chunks": market_packet.get("selected_sources", [])[:8] if escalation_available else [],
+        },
+    ]
+
+    module_status = STATUS_GREEN if benchmark_available and escalation_available else STATUS_AMBER
+    return {
+        "module": "External Benchmark and Market Escalation Review",
+        "traffic_light": module_status,
+        "summary": "External BOK/CDB evidence is separated from client assertions and constrained to compatible cost-estimation uses.",
+        "cost_benchmark_available": benchmark_available,
+        "escalation_evidence_available": escalation_available,
+        "findings": findings,
+    }
+
+
+def build_construction_open_items(evidence_packets, module_results):
+    rows = []
+    seen = set()
+    for result in evidence_packets.get("open_items", {}).get("selected_results", []):
+        chunk_text = clean_text(result.get("chunk_text"))
+        if not has_any(chunk_text, ["missing", "not included", "to be confirmed", "tbc", "pending", "excluded", "provisional"]):
+            continue
+        append_open_item(
+            rows=rows,
+            seen=seen,
+            category="Estimate basis",
+            condition="Resolve open estimate qualification or missing information.",
+            traffic_light=STATUS_AMBER,
+            evidence_text=chunk_text,
+            source_chunks=[get_source_reference(result)],
+            recommended_action="Confirm the item in the basis of estimate, cost plan, BOQ or assumptions register.",
+        )
+
+    for section in module_results.values():
+        if section.get("traffic_light") not in [STATUS_RED, STATUS_AMBER]:
+            continue
+        append_open_item(
+            rows=rows,
+            seen=seen,
+            category=section.get("module"),
+            condition=section.get("summary"),
+            traffic_light=section.get("traffic_light"),
+            evidence_text=section.get("evidence_extract", ""),
+            source_chunks=section.get("source_chunks", []),
+            recommended_action="Estimator should close the gap or document why it is outside the current project scope.",
+        )
+
+    module_status = STATUS_RED if any(row["traffic_light"] == STATUS_RED for row in rows) else STATUS_AMBER if rows else STATUS_GREY
+    return {
+        "module": "Open Items and Estimator Actions",
+        "traffic_light": module_status,
+        "summary": "Open items are generated from missing/weak cost-estimation evidence and explicit unresolved language.",
+        "open_items": rows,
+    }
+
+
+def format_construction_markdown_report(report):
+    lines = []
+    lines.append("# AI Construction Cost Estimation Review")
+    lines.append("")
+    lines.append(f"**Project ID:** {report.get('project_id')}")
+    lines.append(f"**Run ID:** {report.get('run_id')}")
+    lines.append(f"**Generated at:** {report.get('generated_at')}")
+    lines.append("")
+    lines.append("## Executive Summary")
+    lines.append("")
+    summary = report.get("executive_summary", {})
+    lines.append(f"**Overall status:** {traffic_icon(summary.get('overall_readiness_status'))} {summary.get('overall_readiness_status')}")
+    for finding in summary.get("top_findings", []):
+        lines.append(f"- {traffic_icon(finding.get('traffic_light'))} {finding.get('finding')}")
+    lines.append("")
+    lines.append("## Project Profile")
+    lines.append("")
+    lines.append("```json")
+    lines.append(json.dumps(report.get("project_profile", {}), indent=2, ensure_ascii=False))
+    lines.append("```")
+    lines.append("")
+    lines.append("## Dashboard")
+    lines.append("")
+    lines.append("| Section | Status | Summary |")
+    lines.append("|---|---|---|")
+    for item in report.get("traffic_light_dashboard", []):
+        lines.append(f"| {item.get('section_name')} | {traffic_icon(item.get('traffic_light'))} {item.get('traffic_light')} | {clean_text(item.get('summary'))} |")
+    lines.append("")
+
+    section_order = [
+        "estimate_completeness",
+        "cost_metric_reconciliation",
+        "quantity_scope_assumptions",
+        "risk_contingency_review",
+        "external_benchmark_review",
+        "open_items",
+    ]
+    for section_key in section_order:
+        section = report.get(section_key, {})
+        lines.append(f"## {section.get('module', section_key)}")
+        lines.append("")
+        lines.append(f"**Status:** {traffic_icon(section.get('traffic_light'))} {section.get('traffic_light')}")
+        lines.append("")
+        lines.append(clean_text(section.get("summary")))
+        lines.append("")
+        if section_key == "cost_metric_reconciliation":
+            lines.append("| Metric | Values | Status | Issue | Sources |")
+            lines.append("|---|---:|---|---|---|")
+            for row in section.get("reconciliation_table", []):
+                lines.append(f"| {row.get('metric_name')} | {row.get('values')} | {traffic_icon(row.get('traffic_light'))} {row.get('traffic_light')} | {row.get('issue')} | {format_sources_md(row.get('source_chunks'))} |")
+            lines.append("")
+        elif section_key == "external_benchmark_review":
+            for finding in section.get("findings", []):
+                lines.append(f"- {traffic_icon(finding.get('traffic_light'))} **{finding.get('benchmark_area')}**: {finding.get('finding')} {finding.get('allowed_use')}")
+            lines.append("")
+        elif section_key == "open_items":
+            lines.append("| Category | Condition | Priority | Sources |")
+            lines.append("|---|---|---|---|")
+            for row in section.get("open_items", []):
+                lines.append(f"| {row.get('category')} | {row.get('condition')} | {row.get('priority')} | {format_sources_md(row.get('source_chunks'))} |")
+            lines.append("")
+        else:
+            lines.append(f"**Evidence extract:** {clean_text(section.get('evidence_extract'))}")
+            lines.append("")
+            lines.append(f"**Sources:** {format_sources_md(section.get('source_chunks'))}")
+            lines.append("")
+
+    lines.append("## Evidence Appendix")
+    lines.append("")
+    lines.append("| Chunk ID | Document ID | Corpus zone | Corpus pack | Section | Used in modules |")
+    lines.append("|---|---|---|---|---|---|")
+    for src in report.get("evidence_appendix", []):
+        lines.append(
+            f"| {src.get('chunk_id')} | {src.get('document_id')} | {src.get('corpus_zone')} | "
+            f"{src.get('corpus_pack')} | {src.get('section_heading')} | {', '.join(src.get('used_in_modules', []))} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def generate_construction_cost_estimation_report(
+    project_id,
+    use_llm_summary=False,
+    write_audit=True,
+):
+    config_pack = get_config_pack(client_data=project_id)
+    config_base = config_pack["config_base"]
+    run_id = make_run_id(project_id)
+    evidence_packets = run_construction_retrieval_plan(project_id)
+    project_profile = infer_construction_project_profile(project_id, evidence_packets)
+
+    estimate_completeness = simple_module_assessment(
+        "Estimate Completeness and Basis Review",
+        evidence_packets.get("estimate_completeness", {}),
+        ["basis of estimate", "cost plan", "boq", "quantity", "rate", "contingency", "escalation", "exclusion", "assumption"],
+    )
+    quantity_scope_assumptions = simple_module_assessment(
+        "Quantity, Scope and Assumptions Review",
+        evidence_packets.get("quantity_scope_assumptions", {}),
+        ["quantity", "takeoff", "measurement", "scope", "drawing", "specification", "gfa", "boq", "nrm", "icms"],
+    )
+    risk_contingency_review = simple_module_assessment(
+        "Estimate Risk and Contingency Review",
+        evidence_packets.get("risk_contingency_review", {}),
+        ["risk", "contingency", "optimism bias", "design development", "provisional", "procurement", "ground conditions"],
+    )
+    cost_metric_reconciliation = run_construction_cost_reconciliation(evidence_packets)
+    external_benchmark_review = run_construction_external_benchmark_review(evidence_packets)
+
+    module_results = {
+        "estimate_completeness": estimate_completeness,
+        "cost_metric_reconciliation": cost_metric_reconciliation,
+        "quantity_scope_assumptions": quantity_scope_assumptions,
+        "risk_contingency_review": risk_contingency_review,
+        "external_benchmark_review": external_benchmark_review,
+    }
+    open_items = build_construction_open_items(evidence_packets, module_results)
+    module_results["open_items"] = open_items
+
+    executive_summary = build_executive_summary(module_results)
+    executive_summary["module"] = "Executive Construction Cost Estimation Summary"
+    executive_summary["summary"] = (
+        "This output is an AI-assisted construction cost-estimation review. "
+        "It supports estimator review and does not replace professional quantity surveying judgment."
+    )
+    traffic_light_dashboard = build_traffic_light_dashboard(module_results)
+    evidence_appendix = build_evidence_appendix(evidence_packets)
+
+    audit_metadata = {
+        "run_id": run_id,
+        "project_id": project_id,
+        "report_type": REPORT_TYPE,
+        "report_generation_version": REPORT_GENERATION_VERSION,
+        "classification": CLASSIFICATION,
+        "generated_at": utc_now_iso(),
+        "llm_provider": config_base.get("llm_provider"),
+        "llm_model": config_base.get("llm_model"),
+        "retrieval_modules": list(evidence_packets.keys()),
+        "source_chunk_count": len(evidence_appendix),
+        "important_controls": [
+            "No construction cost opinion is made without source evidence.",
+            "Client evidence is separated from BOK/CDB benchmark evidence.",
+            "Benchmark use is constrained by geography, project type, base date, currency and scope compatibility.",
+            "Every finding should be traceable through chunk_id/document_id/source_reference.",
+        ],
+    }
+
+    report = {
+        "run_id": run_id,
+        "project_id": project_id,
+        "transaction_id": project_id,
+        "report_type": REPORT_TYPE,
+        "classification": CLASSIFICATION,
+        "report_generation_version": REPORT_GENERATION_VERSION,
+        "generated_at": audit_metadata["generated_at"],
+        "project_profile": project_profile,
+        "executive_summary": executive_summary,
+        "traffic_light_dashboard": traffic_light_dashboard,
+        "evidence_appendix": evidence_appendix,
+        "audit_metadata": audit_metadata,
+        **module_results,
+    }
+
+    if use_llm_summary:
+        report["llm_executive_summary"] = generate_llm_executive_summary(
+            config_base=config_base,
+            report_core={
+                "executive_summary": executive_summary,
+                "traffic_light_dashboard": traffic_light_dashboard,
+                "project_profile": project_profile,
+                **module_results,
+            },
+        )
+    else:
+        report["llm_executive_summary"] = {"status": "not_requested", "summary_text": ""}
+
+    report["report_quality_status"] = {
+        "schema_ready": True,
+        "content_ready": bool(evidence_appendix),
+        "quality_issues": [] if evidence_appendix else ["Evidence appendix is empty; source traceability is not available."],
+    }
+
+    audit_write_result = {"status": "not_requested"}
+    if write_audit:
+        audit_write_result = write_audit_log(config_base, report)
+    report["audit_write_result"] = audit_write_result
+
+    markdown_report = format_construction_markdown_report(report)
+    saved_outputs = save_report_outputs(config_pack, report, markdown_report)
+    report_status = "ok" if report["report_quality_status"]["content_ready"] else "validation_failed"
+
+    return {
+        "message": "AI construction cost estimation review report generated.",
+        "status": report_status,
+        "run_id": run_id,
+        "project_id": project_id,
+        "overall_readiness_status": executive_summary.get("overall_readiness_status"),
+        "report_quality_status": report.get("report_quality_status"),
+        "output_files": saved_outputs,
+        "audit_write_result": audit_write_result,
+        "report": report,
+    }
+
+
 if __name__ == "__main__":
-    output = generate_investment_ic_review_report(
-        transaction_id="TXN_ADDC_001",
-        use_llm_summary=True,
+    output = generate_construction_cost_estimation_report(
+        project_id="TXN_ADDC_001",
+        use_llm_summary=False,
         write_audit=True,
     )
 

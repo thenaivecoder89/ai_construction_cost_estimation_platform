@@ -12,6 +12,7 @@
 import pandas as pd
 import hashlib
 from datetime import datetime
+from pathlib import Path
 from sqlalchemy import create_engine, inspect, text
 
 # Import paths and settings from the config file
@@ -37,7 +38,7 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
     # not output and scripts since these do not contain evidence data
     folders_to_scan = [
         config_settings["active_client_data_dir"],
-        config_settings["corpus_dir"]
+        *config_settings["corpus_scan_dirs"],
     ]
 
     # Define files and folders to ignore when scanning
@@ -131,6 +132,10 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
             if file_path.name in ignore_file_names:
                 continue
 
+            # Skip Windows alternate data stream metadata copied into Linux files.
+            if file_path.name.lower().endswith(":zone.identifier"):
+                continue
+
             # Skip hidden/ temporary files
             if any(file_path.name.startswith(prefix) for prefix in ignore_file_prefixes):
                 continue
@@ -148,6 +153,8 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
             elif config_settings["corpus_dir"] in file_path.parents:
                 source_group = "corpus_data"
                 relative_to_group = file_path.relative_to(config_settings["corpus_dir"])
+                if not config.is_allowed_corpus_relative_path(relative_to_group):
+                    continue
             else:
                 source_group = "unknown"
                 relative_to_group = file_path.relative_to(config_settings["project_root"])
@@ -156,9 +163,14 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
             if source_group == "client_data":
                 corpus_pack = client_data
             elif len(relative_to_group.parts) > 1:
-                corpus_pack = relative_to_group.parts[0]
+                corpus_pack = relative_to_group.parts[1]
             else:
                 corpus_pack = source_group
+
+            if source_group == "corpus_data":
+                inventory_relative_path = str(Path("corpus") / relative_to_group)
+            else:
+                inventory_relative_path = str(file_path.relative_to(config_settings["project_root"]))
 
             # Section C: Decide extraction method hint
             if file_ext == ".pdf":
@@ -224,7 +236,7 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
                     "corpus_pack": corpus_pack,
                     "file_name": file_path.name,
                     "file_extension": file_ext,
-                    "relative_path": str(file_path.relative_to(config_settings["project_root"])),
+                    "relative_path": inventory_relative_path,
                     "absolute_path": str(file_path),
                     "file_size_bytes": file_size,
                     "last_modified_datetime": last_modified_datetime,
