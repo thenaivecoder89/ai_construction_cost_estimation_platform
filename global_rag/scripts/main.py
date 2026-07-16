@@ -181,12 +181,12 @@ def scrape_world_bank_wdi(
 
 @app.get(path="/generate_review_report", status_code=200)
 def generate_ic_review_report_api(
-    transaction_id: str,
+    project_id: str,
     use_llm_summary: bool = True,
     write_audit: bool = True
 ):
     report_generation_output = rg.generate_construction_cost_estimation_report(
-        project_id=transaction_id,
+        project_id=project_id,
         use_llm_summary=use_llm_summary,
         write_audit=write_audit
     )
