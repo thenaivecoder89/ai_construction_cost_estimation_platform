@@ -21,3 +21,4 @@ scipy
 matplotlib
 pydantic
 statsmodels
+google-cloud-storage
