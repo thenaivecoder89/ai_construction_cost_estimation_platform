@@ -282,15 +282,10 @@ def ai_cost_estimation_chatbot_api(
 ):
     try:
         chatbot_output = chatbot.answer_question(
-            question=q,
-            project_name=project_name,
-            body_of_knowledge=body_of_knowledge,
-            client_data_pack=client_data_pack,
-            chat_history=None,
-            top_k=top_k,
-            workstream=workstream,
-            corpus_pack_filter=corpus_pack_filter,
-            max_output_tokens=max_output_tokens
+            question="Summarize the key construction cost risks and mitigants for this project.",
+            project_name="synthetic_construction_cost_rag_pack",
+            body_of_knowledge="All",
+            top_k=8,
         )
 
         api_response = JSONResponse(
