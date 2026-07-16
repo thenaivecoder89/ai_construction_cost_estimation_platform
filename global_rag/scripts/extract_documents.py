@@ -15,11 +15,13 @@
 # - No OCR. Scanned PDFs will be flagged as no_text_found_possible_scanned_pdf.
 
 from pathlib import Path
+import base64
 import json
 import os
 
 import pandas as pd
 from sqlalchemy import create_engine, text
+from openai import OpenAI
 
 import fitz  # PyMuPDF
 from docx import Document
@@ -99,6 +101,137 @@ def dataframe_to_jsonb_rows(table_id, document_id, sheet_name, df):
         )
 
     return output_rows
+
+
+def extract_svg_text(file_path):
+    svg_content = file_path.read_text(
+        encoding="utf-8",
+        errors="ignore"
+    )
+
+    soup = BeautifulSoup(svg_content, "xml")
+    text_parts = []
+
+    for tag_name in ["title", "desc", "text", "tspan"]:
+        for tag in soup.find_all(tag_name):
+            tag_text = clean_text(tag.get_text(separator=" "))
+            if tag_text:
+                text_parts.append(tag_text)
+
+    if not text_parts:
+        fallback_soup = BeautifulSoup(svg_content, "html.parser")
+        text_parts.append(fallback_soup.get_text(separator="\n"))
+
+    return clean_text("\n".join(text_parts))
+
+
+def extract_dxf_text(file_path):
+    """
+    Extract visible text entities from ASCII DXF files using group-code pairs.
+    This intentionally avoids CAD geometry parsing; it captures TEXT/MTEXT/
+    ATTRIB strings that can be chunked and retrieved.
+    """
+    dxf_content = file_path.read_text(
+        encoding="utf-8",
+        errors="ignore"
+    )
+
+    lines = [line.rstrip("\n\r") for line in dxf_content.splitlines()]
+    text_parts = []
+    active_entity = None
+    capture_next_value = False
+
+    text_entity_types = {"TEXT", "MTEXT", "ATTRIB", "ATTDEF"}
+    text_group_codes = {"1", "3"}
+
+    for index in range(0, len(lines), 2):
+        code = lines[index].strip()
+        value = lines[index + 1].strip() if index + 1 < len(lines) else ""
+
+        if code == "0":
+            active_entity = value.upper()
+            capture_next_value = False
+            continue
+
+        if active_entity in text_entity_types and code in text_group_codes:
+            text_value = clean_text(value.replace("\\P", "\n"))
+            if text_value:
+                text_parts.append(text_value)
+            capture_next_value = False
+            continue
+
+        if capture_next_value:
+            text_value = clean_text(value.replace("\\P", "\n"))
+            if text_value:
+                text_parts.append(text_value)
+            capture_next_value = False
+
+    return clean_text("\n".join(text_parts))
+
+
+def image_mime_type(file_extension):
+    if file_extension in [".jpg", ".jpeg"]:
+        return "image/jpeg"
+    if file_extension == ".webp":
+        return "image/webp"
+
+    return "image/png"
+
+
+def describe_image_file(file_path, file_extension, config_base):
+    if not config.bool_env("EXTRACT_IMAGE_DESCRIPTIONS", True):
+        return clean_text(
+            f"Image file: {file_path.name}. "
+            "Image description extraction disabled by EXTRACT_IMAGE_DESCRIPTIONS."
+        )
+
+    openai_api_key = config_base.get("openai_api_key")
+    if not openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY is required to extract image descriptions.")
+
+    image_model = os.getenv(
+        "OPENAI_IMAGE_EXTRACTION_MODEL",
+        config_base.get("llm_model", "gpt-4.1-mini"),
+    )
+
+    image_bytes = file_path.read_bytes()
+    image_base64 = base64.b64encode(image_bytes).decode("ascii")
+    mime_type = image_mime_type(file_extension)
+    client = OpenAI(api_key=openai_api_key)
+
+    response = client.responses.create(
+        model=image_model,
+        input=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": (
+                            "Extract the construction-cost-relevant information from this image. "
+                            "Describe visible drawing labels, quantities, dimensions, scope notes, "
+                            "cost assumptions, tables, legends, risks, and any text you can read. "
+                            "Do not invent unreadable details."
+                        ),
+                    },
+                    {
+                        "type": "input_image",
+                        "image_url": f"data:{mime_type};base64,{image_base64}",
+                    },
+                ],
+            }
+        ],
+        max_output_tokens=int(os.getenv("OPENAI_IMAGE_EXTRACTION_MAX_OUTPUT_TOKENS", "1200")),
+        store=False,
+    )
+
+    if hasattr(response, "output_text") and response.output_text:
+        return clean_text(response.output_text)
+
+    try:
+        return clean_text(response.output[0].content[0].text)
+    except Exception:
+        return clean_text(str(response))
 
 
 def sync_documents_from_inventory(engine):
@@ -217,12 +350,6 @@ def extract_documents(client_data: str, rebuild_inventory: str = "Y"):
     """
 
     inventory_df = pd.read_sql(text(inventory_sql), engine)
-    if not inventory_df.empty:
-        corpus_rows = inventory_df["source_group"].astype(str) == "corpus_data"
-        allowed_corpus_rows = inventory_df["relative_path"].astype(str).apply(
-            config.is_allowed_project_corpus_path
-        )
-        inventory_df = inventory_df[(~corpus_rows) | allowed_corpus_rows].copy()
 
     documents_processed = 0
     documents_failed = 0
@@ -684,6 +811,58 @@ def extract_documents(client_data: str, rebuild_inventory: str = "Y"):
                                 )
 
                                 table_counter += 1
+
+            elif file_extension == ".svg":
+
+                svg_text = extract_svg_text(file_path)
+
+                text_rows.append(
+                    {
+                        "document_id": document_id,
+                        "page_no": None,
+                        "section_heading": "svg_text",
+                        "extraction_method": "beautifulsoup_svg_text",
+                        "extraction_quality": "svg_text_extracted" if svg_text else "no_extractable_svg_text",
+                        "token_count_estimate": estimate_tokens(svg_text),
+                        "text_content": clean_text(svg_text),
+                    }
+                )
+
+            elif file_extension == ".dxf":
+
+                dxf_text = extract_dxf_text(file_path)
+
+                text_rows.append(
+                    {
+                        "document_id": document_id,
+                        "page_no": None,
+                        "section_heading": "dxf_text_entities",
+                        "extraction_method": "dxf_text_entity_parse",
+                        "extraction_quality": "dxf_text_extracted" if dxf_text else "no_extractable_dxf_text",
+                        "token_count_estimate": estimate_tokens(dxf_text),
+                        "text_content": clean_text(dxf_text),
+                    }
+                )
+
+            elif file_extension in config_paths["supported_image_extensions"]:
+
+                image_description = describe_image_file(
+                    file_path=file_path,
+                    file_extension=file_extension,
+                    config_base=config_base
+                )
+
+                text_rows.append(
+                    {
+                        "document_id": document_id,
+                        "page_no": None,
+                        "section_heading": "image_description",
+                        "extraction_method": "openai_image_description",
+                        "extraction_quality": "image_description_extracted",
+                        "token_count_estimate": estimate_tokens(image_description),
+                        "text_content": clean_text(image_description),
+                    }
+                )
 
             elif file_extension == ".csv":
 

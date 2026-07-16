@@ -10,11 +10,12 @@ import global_rag.scripts.country_macro_llm_call as cmllm
 import global_rag.scripts.country_arima_llm_call as arimallm
 from global_rag.scripts import investment_chatbot as chatbot
 
+import json
 from typing import Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, StreamingResponse
 from pathlib import Path
 
 app = FastAPI()
@@ -89,7 +90,24 @@ def chunk_docs(rebuild_inventory: str = "Y"):
     return api_response
 
 @app.get(path="/embed_chunks", status_code=200)
-def embed_chunks(rebuild_inventory: str = "Y"):
+def embed_chunks(rebuild_inventory: str = "Y", stream: bool = True):
+    if stream:
+        def event_stream():
+            for status_update in emb.iter_embed_chunks(rebuild_inventory=rebuild_inventory):
+                yield json.dumps(
+                    {
+                        "status": status_update.get("status", "ok"),
+                        "output": status_update,
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                ) + "\n"
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="application/x-ndjson",
+        )
+
     embed_documents_output = emb.embed_chunks(
         rebuild_inventory=rebuild_inventory
     )
@@ -254,6 +272,8 @@ def country_arima_llm_call_api(
 @app.get(path="/ai_cost_estimation_chatbot", status_code=200)
 def ai_cost_estimation_chatbot_api(
     q: str,
+    project_name: Optional[str] = None,
+    body_of_knowledge: Optional[str] = None,
     client_data_pack: Optional[str] = None,
     top_k: int = 8,
     workstream: Optional[str] = None,
@@ -263,6 +283,8 @@ def ai_cost_estimation_chatbot_api(
     try:
         chatbot_output = chatbot.answer_question(
             question=q,
+            project_name=project_name,
+            body_of_knowledge=body_of_knowledge,
             client_data_pack=client_data_pack,
             chat_history=None,
             top_k=top_k,

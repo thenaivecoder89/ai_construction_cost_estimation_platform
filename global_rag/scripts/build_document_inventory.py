@@ -26,6 +26,9 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
 
     if rebuild_inventory not in ["Y", "N"]:
         raise ValueError("rebuild_inventory must be 'Y' or 'N'.")
+
+    firebase_corpus_sync = config.sync_corpus_from_firebase(config_settings)
+    firebase_client_data_sync = config.sync_client_data_from_firebase(config_settings)
     
     # Establish DB connection
     engine = create_engine(
@@ -38,7 +41,7 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
     # not output and scripts since these do not contain evidence data
     folders_to_scan = [
         config_settings["active_client_data_dir"],
-        *config_settings["corpus_scan_dirs"],
+        config_settings["corpus_dir"],
     ]
 
     # Define files and folders to ignore when scanning
@@ -153,8 +156,6 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
             elif config_settings["corpus_dir"] in file_path.parents:
                 source_group = "corpus_data"
                 relative_to_group = file_path.relative_to(config_settings["corpus_dir"])
-                if not config.is_allowed_corpus_relative_path(relative_to_group):
-                    continue
             else:
                 source_group = "unknown"
                 relative_to_group = file_path.relative_to(config_settings["project_root"])
@@ -162,8 +163,10 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
             # Section B: Identify corpus/ client data pack
             if source_group == "client_data":
                 corpus_pack = client_data
-            elif len(relative_to_group.parts) > 1:
+            elif len(relative_to_group.parts) > 2:
                 corpus_pack = relative_to_group.parts[1]
+            elif len(relative_to_group.parts) > 1:
+                corpus_pack = relative_to_group.parts[0]
             else:
                 corpus_pack = source_group
 
@@ -189,18 +192,24 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
                 extraction_method_hint = "read_html_file"
             elif file_ext == ".json":
                 extraction_method_hint = "read_json_file"
+            elif file_ext == ".svg":
+                extraction_method_hint = "extract_svg_text"
+            elif file_ext == ".dxf":
+                extraction_method_hint = "extract_dxf_text"
+            elif file_ext in config_settings["supported_image_extensions"]:
+                extraction_method_hint = "extract_image_description"
             elif file_ext == ".zip":
                 extraction_method_hint = "extract_file_and_parse"
             else:
                 extraction_method_hint = "unknown"
 
             # Section D: Decide wether file should be indexed in RAG
-            # - PDFs, DOCXs, TXTx, MDs, HTMLs and JSONs are indexed in RAG
-            # - CSVs, XLSX/ XLSs are not directly indexed in RAG, they are used for analytical purposes
+            # - PDFs, DOCXs, TXTs, MDs, HTMLs, JSONs, PPTX, tables,
+            #   SVG/DXF design text, and PNG image descriptions are indexed in RAG.
             # - ZIP is not indexed directly, it is extracted first
-            if file_ext in [".pdf", ".docx", ".txt", ".md", ".html", ".json", ".pptx"]:
+            if file_ext in config_settings["supported_file_types"] and file_ext != ".zip":
                 index_in_rag = "Yes"
-            elif file_ext in [".csv", ".xlsx", ".xls", ".identifier", ".pdf:mshield", ".json:mshield", ".xml:mshield", ".txt:mshield", ".csv:mshield"]:
+            elif file_ext in [".identifier", ".pdf:mshield", ".json:mshield", ".xml:mshield", ".txt:mshield", ".csv:mshield"]:
                 index_in_rag = "No"
             elif file_ext == ".zip":
                 index_in_rag = "No_extract_archive_first"
@@ -339,6 +348,8 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
         "mode": "rebuild" if rebuild_inventory == "Y" else "update",
         "project_root": str(config_settings["project_root"]),
         "active_client_data_dir": str(config_settings["active_client_data_dir"]),
+        "firebase_corpus_sync": firebase_corpus_sync,
+        "firebase_client_data_sync": firebase_client_data_sync,
         "scan_folders": scan_folders,
         "missing_folders": missing_folders,
         "scanned_files": scanned_files_count,
@@ -351,4 +362,4 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
 
 if __name__ == "__main__":
     print("Executing the build program")
-    print(build_document_inventory(client_data="TXN_ADDC_001", rebuild_inventory="Y"))
+    print(build_document_inventory(client_data="synthetic_construction_cost_rag_pack", rebuild_inventory="Y"))

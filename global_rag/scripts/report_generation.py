@@ -115,9 +115,13 @@ def has_all(text_value, terms):
 
 
 def make_run_id(transaction_id):
-    raw_value = f"{transaction_id}_{utc_now_iso()}_{REPORT_GENERATION_VERSION}"
+    run_label = re.sub(r"[^A-Za-z0-9_]+", "_", clean_text(transaction_id)).strip("_")
+    if not run_label:
+        run_label = "PROJECT"
+
+    raw_value = f"{run_label}_{utc_now_iso()}_{REPORT_GENERATION_VERSION}"
     digest = hashlib.sha256(raw_value.encode("utf-8")).hexdigest()[:12]
-    return f"RPT_{transaction_id}_{digest}"
+    return f"RPT_{run_label}_{digest}"
 
 
 def get_config_pack(client_data):
@@ -4901,9 +4905,79 @@ def run_construction_retrieval_plan(project_id):
     return evidence_packets
 
 
+def infer_project_name_from_evidence(client_data_pack, evidence_packets):
+    profile_results = evidence_packets.get("project_profile", {}).get("selected_results", [])
+    text_candidates = []
+
+    for result in profile_results:
+        if clean_text(result.get("corpus_zone")) != "client_data":
+            continue
+        text_candidates.append(clean_text(result.get("chunk_text")))
+        text_candidates.append(clean_text(result.get("section_heading")))
+        text_candidates.append(clean_text(result.get("source_reference")))
+
+    evidence_text = " ".join(text_candidates)
+    if not evidence_text:
+        return client_data_pack
+
+    def normalize_project_name_candidate(candidate):
+        candidate = clean_text(str(candidate).replace("_", " "))
+        candidate = re.sub(
+            r"\s+(?:cost veracity assessment|construction cost model|cost model|assessment report|review report).*$",
+            "",
+            candidate,
+            flags=re.IGNORECASE,
+        )
+        return clean_text(candidate)
+
+    structured_match = re.search(
+        r"\b(Project_[A-Z][A-Za-z0-9]+)(?:_|\.|\b)",
+        evidence_text,
+    )
+    if structured_match:
+        candidate = normalize_project_name_candidate(structured_match.group(1))
+        if candidate:
+            return candidate
+
+    explicit_patterns = [
+        r"\bproject[_\s-]*name\s*[:=\-]\s*(Project\s+[A-Z][A-Za-z0-9]*(?:\s+[A-Z][A-Za-z0-9]*){0,3})\b",
+        r"\bproject\s*[:=\-]\s*(Project\s+[A-Z][A-Za-z0-9]*(?:\s+[A-Z][A-Za-z0-9]*){0,3})\b",
+    ]
+    for pattern in explicit_patterns:
+        match = re.search(pattern, evidence_text, flags=re.IGNORECASE)
+        if match:
+            candidate = normalize_project_name_candidate(match.group(1))
+            if candidate:
+                return candidate
+
+    generic_matches = re.findall(
+        r"\b(Project\s+[A-Z][A-Za-z0-9]*(?:\s+[A-Z][A-Za-z0-9]*){0,3})\b",
+        evidence_text,
+    )
+    excluded = {
+        "project cost",
+        "project costs",
+        "project scope",
+        "project stage",
+        "project type",
+        "project profile",
+        "project name",
+        "project id",
+        "project root",
+    }
+
+    for candidate in generic_matches:
+        candidate = normalize_project_name_candidate(candidate)
+        if normalize_text(candidate) not in excluded:
+            return candidate
+
+    return client_data_pack
+
+
 def infer_construction_project_profile(project_id, evidence_packets):
     profile_results = evidence_packets.get("project_profile", {}).get("selected_results", [])
     blob = normalize_text(get_evidence_blob(profile_results))
+    project_name = infer_project_name_from_evidence(project_id, evidence_packets)
 
     project_types = {
         "residential": ["residential", "apartment", "villa", "housing"],
@@ -4934,7 +5008,9 @@ def infer_construction_project_profile(project_id, evidence_packets):
         confidence = "high"
 
     return {
-        "project_id": project_id,
+        "project_id": project_name,
+        "project_name": project_name,
+        "client_data_pack": project_id,
         "project_type": project_type,
         "estimate_stage": estimate_stage,
         "geography": geography,
@@ -5141,7 +5217,8 @@ def format_construction_markdown_report(report):
     lines = []
     lines.append("# AI Construction Cost Estimation Review")
     lines.append("")
-    lines.append(f"**Project ID:** {report.get('project_id')}")
+    lines.append(f"**Project Name:** {report.get('project_name') or report.get('project_id')}")
+    lines.append(f"**Client Data Pack:** {report.get('client_data_pack')}")
     lines.append(f"**Run ID:** {report.get('run_id')}")
     lines.append(f"**Generated at:** {report.get('generated_at')}")
     lines.append("")
@@ -5224,9 +5301,11 @@ def generate_construction_cost_estimation_report(
 ):
     config_pack = get_config_pack(client_data=project_id)
     config_base = config_pack["config_base"]
-    run_id = make_run_id(project_id)
     evidence_packets = run_construction_retrieval_plan(project_id)
     project_profile = infer_construction_project_profile(project_id, evidence_packets)
+    client_data_pack = project_id
+    project_name = project_profile.get("project_name") or project_id
+    run_id = make_run_id(project_name)
 
     estimate_completeness = simple_module_assessment(
         "Estimate Completeness and Basis Review",
@@ -5267,13 +5346,21 @@ def generate_construction_cost_estimation_report(
 
     audit_metadata = {
         "run_id": run_id,
-        "project_id": project_id,
+        "project_id": project_name,
+        "project_name": project_name,
+        "client_data_pack": client_data_pack,
         "report_type": REPORT_TYPE,
         "report_generation_version": REPORT_GENERATION_VERSION,
         "classification": CLASSIFICATION,
         "generated_at": utc_now_iso(),
         "llm_provider": config_base.get("llm_provider"),
         "llm_model": config_base.get("llm_model"),
+        "client_data_source": {
+            "active_client_data_dir": str(config_pack["config_paths"].get("active_client_data_dir")),
+            "firebase_storage_bucket": config_pack["config_paths"].get("firebase_storage_bucket"),
+            "firebase_client_data_active_prefix": config_pack["config_paths"].get("firebase_client_data_active_prefix"),
+            "firebase_corpus_prefix": config_pack["config_paths"].get("firebase_corpus_prefix"),
+        },
         "retrieval_modules": list(evidence_packets.keys()),
         "source_chunk_count": len(evidence_appendix),
         "important_controls": [
@@ -5286,8 +5373,10 @@ def generate_construction_cost_estimation_report(
 
     report = {
         "run_id": run_id,
-        "project_id": project_id,
-        "transaction_id": project_id,
+        "project_id": project_name,
+        "project_name": project_name,
+        "client_data_pack": client_data_pack,
+        "transaction_id": project_name,
         "report_type": REPORT_TYPE,
         "classification": CLASSIFICATION,
         "report_generation_version": REPORT_GENERATION_VERSION,
@@ -5332,7 +5421,9 @@ def generate_construction_cost_estimation_report(
         "message": "AI construction cost estimation review report generated.",
         "status": report_status,
         "run_id": run_id,
-        "project_id": project_id,
+        "project_id": project_name,
+        "project_name": project_name,
+        "client_data_pack": client_data_pack,
         "overall_readiness_status": executive_summary.get("overall_readiness_status"),
         "report_quality_status": report.get("report_quality_status"),
         "output_files": saved_outputs,
@@ -5343,7 +5434,7 @@ def generate_construction_cost_estimation_report(
 
 if __name__ == "__main__":
     output = generate_construction_cost_estimation_report(
-        project_id="TXN_ADDC_001",
+        project_id="synthetic_construction_cost_rag_pack",
         use_llm_summary=False,
         write_audit=True,
     )

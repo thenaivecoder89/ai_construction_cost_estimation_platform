@@ -139,15 +139,16 @@ def _to_pgvector_literal(vector: List[float]) -> str:
 
 def retrieve_relevant_chunks(
     question: str,
-    corpus_data_pack: Optional[str],
+    project_name: Optional[str],
+    body_of_knowledge: Optional[str] = None,
     top_k: int = 8,
     workstream: Optional[str] = None,
     corpus_pack_filter: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Retrieve relevant chunks from:
-    1. Global corpus data
-    2. The selected client data pack only
+    1. The selected client project pack only
+    2. Global corpus data, optionally restricted to a selected body of knowledge
 
     This prevents accidental leakage across client packs.
     """
@@ -155,12 +156,21 @@ def retrieve_relevant_chunks(
     query_embedding = _get_query_embedding(question)
     query_vector = _to_pgvector_literal(query_embedding)
 
-    if corpus_data_pack:
+    body_of_knowledge = (body_of_knowledge or "").strip()
+    if body_of_knowledge.upper() == "ALL":
+        body_of_knowledge = ""
+
+    if project_name:
         client_scope_filter = """
             (
                 c.corpus_zone = 'corpus_data'
-                OR c.corpus_pack = :corpus_data_pack
-                OR d.corpus_pack = :corpus_data_pack
+                OR (
+                    c.corpus_zone = 'client_data'
+                    AND (
+                        c.corpus_pack = :project_name
+                        OR d.corpus_pack = :project_name
+                    )
+                )
             )
         """
     else:
@@ -178,6 +188,19 @@ def retrieve_relevant_chunks(
     if corpus_pack_filter:
         optional_filters += """
             AND c.corpus_pack = :corpus_pack_filter
+        """
+
+    if body_of_knowledge:
+        optional_filters += """
+            AND (
+                c.corpus_zone != 'corpus_data'
+                OR c.corpus_pack ILIKE :body_of_knowledge_pattern
+                OR d.corpus_pack ILIKE :body_of_knowledge_pattern
+                OR d.file_name ILIKE :body_of_knowledge_pattern
+                OR d.document_title ILIKE :body_of_knowledge_pattern
+                OR d.relative_path ILIKE :body_of_knowledge_pattern
+                OR c.source_reference ILIKE :body_of_knowledge_pattern
+            )
         """
 
     sql = text(f"""
@@ -228,7 +251,7 @@ def retrieve_relevant_chunks(
 
     params = {
         "query_vector": query_vector,
-        "corpus_data_pack": corpus_data_pack,
+        "project_name": project_name,
         "top_k": top_k,
     }
 
@@ -237,6 +260,9 @@ def retrieve_relevant_chunks(
 
     if corpus_pack_filter:
         params["corpus_pack_filter"] = corpus_pack_filter
+
+    if body_of_knowledge:
+        params["body_of_knowledge_pattern"] = f"%{body_of_knowledge}%"
 
     with engine.connect() as conn:
         rows = conn.execute(sql, params).mappings().all()
@@ -247,17 +273,22 @@ def retrieve_relevant_chunks(
 # ---------------------------------------------------------------------
 # 6. Prompt construction
 # ---------------------------------------------------------------------
-def system_prompt(
-        corpus_data_pack: str
-):
+def system_prompt(project_name: Optional[str], body_of_knowledge: Optional[str]):
+    selected_body_of_knowledge = (body_of_knowledge or "").strip()
+    if selected_body_of_knowledge == "" or selected_body_of_knowledge.upper() == "ALL":
+        selected_body_of_knowledge = "all applicable indexed corpus sources"
+
     SYSTEM_PROMPT = f"""
-    You are an evidence-based construction cost estimation and project cost advisory chatbot for {corpus_data_pack}.
+    You are an evidence-based construction cost estimation and project cost advisory chatbot for {project_name or PROJECT_NAME}.
     Your role is to support cost planning, estimate validation, benchmarking, cost-driver analysis, and the identification of project-specific cost risks and assumptions.
 
     Your job:
     - Answer user questions using only the retrieved context provided to you.
-    - Prioritize client evidence over generic corpus guidance when both are available.
+    - Treat the selected project as the client evidence scope.
+    - Analyze the project against the selected body of knowledge: {selected_body_of_knowledge}.
+    - Prioritize project evidence over generic corpus guidance when both are available.
     - Use corpus data for methodology, benchmarks, market context, and analytical framing.
+    - If all corpus sources were requested, use only the corpus information that is applicable to the question and project evidence.
     - If the retrieved context is insufficient, say so clearly.
     - Do not invent facts, numbers, dates, approvals, risks, or source references.
     - Distinguish between direct evidence and your interpretation.
@@ -330,6 +361,8 @@ def build_context_blocks(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def build_user_prompt(
     question: str,
+    project_name: Optional[str],
+    body_of_knowledge: Optional[str],
     context_blocks: List[Dict[str, Any]],
     chat_history: Optional[List[Dict[str, str]]] = None,
 ) -> str:
@@ -383,6 +416,12 @@ content:
 USER QUESTION:
 {question}
 
+PROJECT NAME:
+{project_name or "No project name supplied."}
+
+BODY OF KNOWLEDGE FOR INFERENCE:
+{body_of_knowledge or "All"}
+
 RECENT CHAT HISTORY:
 {history_text if history_text else "No prior chat history supplied."}
 
@@ -419,7 +458,8 @@ def _extract_response_text(response: Any) -> str:
 
 def generate_answer(
     question: str,
-    corpus_data_pack: str,
+    project_name: Optional[str],
+    body_of_knowledge: Optional[str],
     context_blocks: List[Dict[str, Any]],
     chat_history: Optional[List[Dict[str, str]]] = None,
     max_output_tokens: int = 1200,
@@ -430,6 +470,8 @@ def generate_answer(
 
     user_prompt = build_user_prompt(
         question=question,
+        project_name=project_name,
+        body_of_knowledge=body_of_knowledge,
         context_blocks=context_blocks,
         chat_history=chat_history,
     )
@@ -439,7 +481,10 @@ def generate_answer(
         input=[
             {
                 "role": "system",
-                "content": system_prompt(corpus_data_pack=corpus_data_pack),
+                "content": system_prompt(
+                    project_name=project_name,
+                    body_of_knowledge=body_of_knowledge,
+                ),
             },
             {
                 "role": "user",
@@ -459,12 +504,15 @@ def generate_answer(
 
 def answer_question(
     question: str,
-    corpus_data_pack: Optional[str],
+    project_name: Optional[str] = None,
+    body_of_knowledge: Optional[str] = None,
     chat_history: Optional[List[Dict[str, str]]] = None,
     top_k: int = 8,
     workstream: Optional[str] = None,
     corpus_pack_filter: Optional[str] = None,
     max_output_tokens: int = 1200,
+    client_data_pack: Optional[str] = None,
+    corpus_data_pack: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Main function to call from your future API layer.
@@ -473,10 +521,14 @@ def answer_question(
         question:
             User's question.
 
-        corpus_data_pack:
-            Transaction/client pack to include.
-            Example: "TXN_HELIOS_001" or "TXN_ADDC_001".
+        project_name:
+            Client project pack to include.
+            Example: "synthetic_construction_cost_rag_pack".
             If None, the chatbot searches only global corpus data.
+
+        body_of_knowledge:
+            Specific corpus document/body of knowledge to analyze against,
+            e.g. "RICS NRM 1". Blank or "All" searches all corpus data.
 
         chat_history:
             Optional recent conversation history from API/session layer.
@@ -505,9 +557,17 @@ def answer_question(
             "sources": [],
         }
 
+    if not project_name:
+        project_name = client_data_pack or corpus_data_pack
+
+    selected_body_of_knowledge = (body_of_knowledge or "").strip()
+    if selected_body_of_knowledge.upper() == "ALL":
+        selected_body_of_knowledge = ""
+
     chunks = retrieve_relevant_chunks(
         question=question,
-        corpus_data_pack=corpus_data_pack,
+        project_name=project_name,
+        body_of_knowledge=selected_body_of_knowledge,
         top_k=top_k,
         workstream=workstream,
         corpus_pack_filter=corpus_pack_filter,
@@ -521,7 +581,8 @@ def answer_question(
                 "Please confirm that the documents were extracted, chunked, embedded, "
                 "and marked index_in_rag = Yes."
             ),
-            "corpus_data_pack": corpus_data_pack,
+            "project_name": project_name,
+            "body_of_knowledge": body_of_knowledge or "All",
             "sources": [],
             "model": LLM_MODEL,
             "embedding_model": EMBEDDING_MODEL,
@@ -531,7 +592,8 @@ def answer_question(
 
     answer = generate_answer(
         question=question,
-        corpus_data_pack=corpus_data_pack,
+        project_name=project_name,
+        body_of_knowledge=body_of_knowledge or "All",
         context_blocks=context_blocks,
         chat_history=chat_history,
         max_output_tokens=max_output_tokens,
@@ -542,7 +604,8 @@ def answer_question(
     return {
         "status": "success",
         "answer": answer,
-        "corpus_data_pack": corpus_data_pack,
+        "project_name": project_name,
+        "body_of_knowledge": body_of_knowledge or "All",
         "model": LLM_MODEL,
         "embedding_model": EMBEDDING_MODEL,
         "retrieval": {
@@ -594,8 +657,9 @@ def health_check() -> Dict[str, Any]:
 
 if __name__ == "__main__":
     result = answer_question(
-        question="Summarize the key investment risks and mitigants for this transaction.",
-        corpus_data_pack="TXN_HELIOS_001", # To be changed later
+        question="Summarize the key construction cost risks and mitigants for this project.",
+        project_name="synthetic_construction_cost_rag_pack",
+        body_of_knowledge="All",
         top_k=8,
     )
 
