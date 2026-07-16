@@ -186,7 +186,7 @@ def generate_ic_review_report_api(
     write_audit: bool = True
 ):
     report_generation_output = rg.generate_construction_cost_estimation_report(
-        transaction_id=transaction_id,
+        project_id=transaction_id,
         use_llm_summary=use_llm_summary,
         write_audit=write_audit
     )
