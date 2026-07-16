@@ -57,6 +57,14 @@ EMBEDDING_DIMENSION = CFG.get("embedding_dimension", 1536)
 PROJECT_NAME = CFG.get("project_name", "AI Investment RAG")
 DEFAULT_JURISDICTION = CFG.get("default_jurisdiction", "UAE")
 DEFAULT_CURRENCY = CFG.get("default_currency", "AED")
+DEFAULT_CLIENT_DATA_PACK = os.getenv(
+    "DEFAULT_CLIENT_DATA_PACK",
+    "synthetic_construction_cost_rag_pack",
+)
+DEFAULT_BODY_OF_KNOWLEDGE = os.getenv("DEFAULT_BODY_OF_KNOWLEDGE", "All")
+DEFAULT_CHATBOT_QUESTION = (
+    "Summarize the key construction cost risks and mitigants for this project."
+)
 
 DB_SCHEMA = os.getenv("RAG_DB_SCHEMA", "public")
 
@@ -144,6 +152,7 @@ def retrieve_relevant_chunks(
     top_k: int = 8,
     workstream: Optional[str] = None,
     corpus_pack_filter: Optional[str] = None,
+    source_scope: str = "combined",
 ) -> List[Dict[str, Any]]:
     """
     Retrieve relevant chunks from:
@@ -160,8 +169,27 @@ def retrieve_relevant_chunks(
     if body_of_knowledge.upper() == "ALL":
         body_of_knowledge = ""
 
-    if project_name:
-        client_scope_filter = """
+    source_scope = (source_scope or "combined").strip().lower()
+    if source_scope not in ["combined", "client_data", "corpus_data"]:
+        source_scope = "combined"
+
+    if source_scope == "client_data":
+        if not project_name:
+            return []
+
+        scope_filter = """
+            c.corpus_zone = 'client_data'
+            AND (
+                c.corpus_pack = :project_name
+                OR d.corpus_pack = :project_name
+            )
+        """
+    elif source_scope == "corpus_data":
+        scope_filter = """
+            c.corpus_zone = 'corpus_data'
+        """
+    elif project_name:
+        scope_filter = """
             (
                 c.corpus_zone = 'corpus_data'
                 OR (
@@ -174,7 +202,7 @@ def retrieve_relevant_chunks(
             )
         """
     else:
-        client_scope_filter = """
+        scope_filter = """
             c.corpus_zone = 'corpus_data'
         """
 
@@ -193,8 +221,7 @@ def retrieve_relevant_chunks(
     if body_of_knowledge:
         optional_filters += """
             AND (
-                c.corpus_zone != 'corpus_data'
-                OR c.corpus_pack ILIKE :body_of_knowledge_pattern
+                c.corpus_pack ILIKE :body_of_knowledge_pattern
                 OR d.corpus_pack ILIKE :body_of_knowledge_pattern
                 OR d.file_name ILIKE :body_of_knowledge_pattern
                 OR d.document_title ILIKE :body_of_knowledge_pattern
@@ -240,8 +267,8 @@ def retrieve_relevant_chunks(
             -- index_in_rag is BOOLEAN in your DB
             AND COALESCE(d.index_in_rag, TRUE) = TRUE
 
-            -- Prevent cross-client leakage
-            AND {client_scope_filter}
+            -- Prevent cross-client leakage while allowing scoped corpus retrieval.
+            AND {scope_filter}
 
             {optional_filters}
 
@@ -288,6 +315,8 @@ def system_prompt(project_name: Optional[str], body_of_knowledge: Optional[str])
     - Analyze the project against the selected body of knowledge: {selected_body_of_knowledge}.
     - Prioritize project evidence over generic corpus guidance when both are available.
     - Use corpus data for methodology, benchmarks, market context, and analytical framing.
+    - Compare project-specific cost risks, assumptions, rates, quantities, contingency, escalation, and mitigants against applicable BOK/CDB guidance when that evidence is available.
+    - Clearly separate what the project documents say from what the BOK/CDB documents imply for compliance, completeness, or challenge.
     - If all corpus sources were requested, use only the corpus information that is applicable to the question and project evidence.
     - If the retrieved context is insufficient, say so clearly.
     - Do not invent facts, numbers, dates, approvals, risks, or source references.
@@ -386,13 +415,15 @@ def build_user_prompt(
             history_lines.append(f"{role}: {content}")
         history_text = "\n".join(history_lines)
 
-    context_text_parts = []
+    project_context_parts = []
+    corpus_context_parts = []
+    other_context_parts = []
+
     for block in context_blocks:
         source = block["source"]
         source_id = source["source_id"]
 
-        context_text_parts.append(
-            f"""
+        context_block_text = f"""
 [{source_id}]
 document_id: {source.get("document_id")}
 chunk_id: {source.get("chunk_id")}
@@ -408,9 +439,32 @@ similarity: {source.get("similarity")}
 content:
 {block["text"]}
 """.strip()
+
+        if source.get("corpus_zone") == "client_data":
+            project_context_parts.append(context_block_text)
+        elif source.get("corpus_zone") == "corpus_data":
+            corpus_context_parts.append(context_block_text)
+        else:
+            other_context_parts.append(context_block_text)
+
+    context_sections = []
+    if project_context_parts:
+        context_sections.append(
+            "PROJECT EVIDENCE FROM THE SELECTED CLIENT DATA PACK:\n"
+            + "\n\n---\n\n".join(project_context_parts)
+        )
+    if corpus_context_parts:
+        context_sections.append(
+            "BOK/CDB EVIDENCE FOR BENCHMARKING, STANDARDS, AND CHALLENGE:\n"
+            + "\n\n---\n\n".join(corpus_context_parts)
+        )
+    if other_context_parts:
+        context_sections.append(
+            "OTHER RETRIEVED EVIDENCE:\n"
+            + "\n\n---\n\n".join(other_context_parts)
         )
 
-    context_text = "\n\n---\n\n".join(context_text_parts)
+    context_text = "\n\n====================\n\n".join(context_sections)
 
     prompt = f"""
 USER QUESTION:
@@ -433,7 +487,8 @@ RESPONSE INSTRUCTIONS:
 2. Use only the retrieved context.
 3. Cite every material claim using [S1], [S2], etc.
 4. If evidence is weak or missing, say what is missing.
-5. Where useful, structure the answer under short headings.
+5. Compare project evidence against applicable BOK/CDB evidence rather than giving generic guidance.
+6. Where useful, structure the answer under short headings.
 """.strip()
 
     return prompt
@@ -551,27 +606,51 @@ def answer_question(
 
     question = (question or "").strip()
     if not question:
-        return {
-            "status": "error",
-            "answer": "Question cannot be empty.",
-            "sources": [],
-        }
+        question = DEFAULT_CHATBOT_QUESTION
 
     if not project_name:
-        project_name = client_data_pack or corpus_data_pack
+        project_name = client_data_pack or DEFAULT_CLIENT_DATA_PACK
 
     selected_body_of_knowledge = (body_of_knowledge or "").strip()
+    if not selected_body_of_knowledge:
+        selected_body_of_knowledge = DEFAULT_BODY_OF_KNOWLEDGE
     if selected_body_of_knowledge.upper() == "ALL":
         selected_body_of_knowledge = ""
 
-    chunks = retrieve_relevant_chunks(
+    top_k = int(top_k or 8)
+    if top_k <= 0:
+        top_k = 8
+
+    selected_corpus_pack_filter = corpus_pack_filter or corpus_data_pack
+
+    project_chunks = retrieve_relevant_chunks(
+        question=question,
+        project_name=project_name,
+        body_of_knowledge=None,
+        top_k=top_k,
+        workstream=workstream,
+        corpus_pack_filter=None,
+        source_scope="client_data",
+    )
+
+    corpus_chunks = retrieve_relevant_chunks(
         question=question,
         project_name=project_name,
         body_of_knowledge=selected_body_of_knowledge,
         top_k=top_k,
         workstream=workstream,
-        corpus_pack_filter=corpus_pack_filter,
+        corpus_pack_filter=selected_corpus_pack_filter,
+        source_scope="corpus_data",
     )
+
+    chunks = []
+    seen_chunk_ids = set()
+    for row in project_chunks + corpus_chunks:
+        chunk_id = row.get("chunk_id")
+        if chunk_id in seen_chunk_ids:
+            continue
+        seen_chunk_ids.add(chunk_id)
+        chunks.append(row)
 
     if not chunks:
         return {
@@ -586,6 +665,14 @@ def answer_question(
             "sources": [],
             "model": LLM_MODEL,
             "embedding_model": EMBEDDING_MODEL,
+            "retrieval": {
+                "project_top_k": top_k,
+                "corpus_top_k": top_k,
+                "project_source_count": 0,
+                "corpus_source_count": 0,
+                "workstream": workstream,
+                "corpus_pack_filter": selected_corpus_pack_filter,
+            },
         }
 
     context_blocks = build_context_blocks(chunks)
@@ -610,8 +697,12 @@ def answer_question(
         "embedding_model": EMBEDDING_MODEL,
         "retrieval": {
             "top_k": top_k,
+            "project_top_k": top_k,
+            "corpus_top_k": top_k,
             "workstream": workstream,
-            "corpus_pack_filter": corpus_pack_filter,
+            "corpus_pack_filter": selected_corpus_pack_filter,
+            "project_source_count": len(project_chunks),
+            "corpus_source_count": len(corpus_chunks),
             "source_count": len(sources),
         },
         "sources": sources,
