@@ -179,28 +179,28 @@ def scrape_world_bank_wdi(
 
 #     return api_response
 
-# @app.get(path="/generate_ic_review_report", status_code=200)
-# def generate_ic_review_report_api(
-#     transaction_id: str,
-#     use_llm_summary: bool = True,
-#     write_audit: bool = True
-# ):
-#     report_generation_output = rg.generate_investment_ic_review_report(
-#         transaction_id=transaction_id,
-#         use_llm_summary=use_llm_summary,
-#         write_audit=write_audit
-#     )
+@app.get(path="/generate_review_report", status_code=200)
+def generate_ic_review_report_api(
+    transaction_id: str,
+    use_llm_summary: bool = True,
+    write_audit: bool = True
+):
+    report_generation_output = rg.generate_construction_cost_estimation_report(
+        transaction_id=transaction_id,
+        use_llm_summary=use_llm_summary,
+        write_audit=write_audit
+    )
 
-#     api_response = JSONResponse(
-#         content=jsonable_encoder(
-#             {
-#                 "status": "ok",
-#                 "output": report_generation_output
-#             }
-#         )
-#     )
+    api_response = JSONResponse(
+        content=jsonable_encoder(
+            {
+                "status": "ok",
+                "output": report_generation_output
+            }
+        )
+    )
 
-#     return api_response
+    return api_response
 
 @app.get(path="/country_macro_llm_call", status_code=200)
 def country_macro_llm_call_api(
