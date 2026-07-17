@@ -20,7 +20,13 @@ from global_rag.scripts import config
 from global_rag.scripts import country_macro_clustering
 
 
-DEFAULT_ASSET_CLASSES = ["Solar PV", "BESS", "Onshore Wind", "Offshore Wind"]
+DEFAULT_CONSTRUCTION_LENSES = [
+    "Project Identification",
+    "Project Costing",
+    "Project Design",
+    "Procurement and Contracting",
+    "Construction Management",
+]
 DEFAULT_REGIONAL_LENS = [
     "UAE",
     "GCC stable-peg economies",
@@ -63,29 +69,29 @@ LLM_OUTPUT_SCHEMA: Dict[str, Any] = {
                     "countries": {"type": "array", "items": {"type": "string"}},
                     "macro_risk_readout": {"type": "string"},
                     "project_development_implication": {"type": "string"},
-                    "asset_class_implications": {
+                    "construction_lens_implications": {
                         "type": "array",
                         "items": {
                             "type": "object",
                             "additionalProperties": False,
                             "properties": {
-                                "asset_class": {
+                                "construction_lens": {
                                     "type": "string",
-                                    "enum": DEFAULT_ASSET_CLASSES,
+                                    "enum": DEFAULT_CONSTRUCTION_LENSES,
                                 },
                                 "what_to_modify_or_consider": {"type": "string"},
-                                "commercial_structuring": {"type": "string"},
-                                "financing_and_bankability": {"type": "string"},
+                                "cost_planning_implication": {"type": "string"},
+                                "delivery_and_programme_implication": {"type": "string"},
                                 "risk_mitigants": {
                                     "type": "array",
                                     "items": {"type": "string"},
                                 },
                             },
                             "required": [
-                                "asset_class",
+                                "construction_lens",
                                 "what_to_modify_or_consider",
-                                "commercial_structuring",
-                                "financing_and_bankability",
+                                "cost_planning_implication",
+                                "delivery_and_programme_implication",
                                 "risk_mitigants",
                             ],
                         },
@@ -96,7 +102,7 @@ LLM_OUTPUT_SCHEMA: Dict[str, Any] = {
                     "countries",
                     "macro_risk_readout",
                     "project_development_implication",
-                    "asset_class_implications",
+                    "construction_lens_implications",
                 ],
             },
         },
@@ -106,29 +112,29 @@ LLM_OUTPUT_SCHEMA: Dict[str, Any] = {
             "properties": {
                 "uae_cluster_position": {"type": "string"},
                 "why_uae_matters_for_project_screening": {"type": "string"},
-                "asset_class_actions": {
+                "construction_lens_actions": {
                     "type": "array",
                     "items": {
                         "type": "object",
                         "additionalProperties": False,
                         "properties": {
-                            "asset_class": {
+                            "construction_lens": {
                                 "type": "string",
-                                "enum": DEFAULT_ASSET_CLASSES,
+                                "enum": DEFAULT_CONSTRUCTION_LENSES,
                             },
                             "modifications_or_considerations": {"type": "string"},
-                            "tariff_or_revenue_model_implication": {"type": "string"},
-                            "capex_opex_and_contingency_implication": {"type": "string"},
+                            "procurement_or_commercial_model_implication": {"type": "string"},
+                            "cost_estimate_and_contingency_implication": {"type": "string"},
                             "due_diligence_focus_areas": {
                                 "type": "array",
                                 "items": {"type": "string"},
                             },
                         },
                         "required": [
-                            "asset_class",
+                            "construction_lens",
                             "modifications_or_considerations",
-                            "tariff_or_revenue_model_implication",
-                            "capex_opex_and_contingency_implication",
+                            "procurement_or_commercial_model_implication",
+                            "cost_estimate_and_contingency_implication",
                             "due_diligence_focus_areas",
                         ],
                     },
@@ -137,7 +143,7 @@ LLM_OUTPUT_SCHEMA: Dict[str, Any] = {
             "required": [
                 "uae_cluster_position",
                 "why_uae_matters_for_project_screening",
-                "asset_class_actions",
+                "construction_lens_actions",
             ],
         },
         "country_watchlist": {
@@ -148,12 +154,12 @@ LLM_OUTPUT_SCHEMA: Dict[str, Any] = {
                 "properties": {
                     "country": {"type": "string"},
                     "reason_for_attention": {"type": "string"},
-                    "renewables_implication": {"type": "string"},
+                    "construction_cost_implication": {"type": "string"},
                 },
                 "required": [
                     "country",
                     "reason_for_attention",
-                    "renewables_implication",
+                    "construction_cost_implication",
                 ],
             },
         },
@@ -188,21 +194,22 @@ LLM_OUTPUT_SCHEMA: Dict[str, Any] = {
 
 
 SYSTEM_PROMPT = """
-You are a senior infrastructure and energy investment advisor.
+You are a senior construction economics, cost planning, and infrastructure delivery advisor.
 
-You convert macro-risk clustering outputs into practical implications for renewable-energy and energy-transition projects.
-Focus on these asset classes only:
-- Solar PV
-- BESS
-- Onshore Wind
-- Offshore Wind
+You convert macro-risk clustering outputs into practical implications for construction-sector decisions.
+Focus on these construction lenses only:
+- Project Identification
+- Project Costing
+- Project Design
+- Procurement and Contracting
+- Construction Management
 
 Your interpretation must be grounded in the supplied clustering JSON and graph images.
 Do not invent cluster assignments. Use the clustering datasets as the source of truth.
-If K-Means, Hierarchical Clustering, and Gaussian Mixture Model disagree, explicitly explain the disagreement and what it means for investment decision-making.
+If K-Means, Hierarchical Clustering, and Gaussian Mixture Model disagree, explicitly explain the disagreement and what it means for construction project screening, costing, design, procurement, and delivery planning.
 
-Write for a client-facing investment, strategy, and due-diligence audience.
-Connect macro-risk signals to tariff design, FX assumptions, offtake structure, EPC/O&M risk, financing, contingency, grid risk, permitting, import exposure, and downside-case modelling.
+Write for a client-facing construction cost estimation, project controls, design management, procurement, and due-diligence audience.
+Connect macro-risk signals to project pipeline prioritisation, concept design assumptions, cost estimate basis, escalation allowances, contingency, material and equipment import exposure, labour availability, productivity risk, permitting, procurement route, contract risk allocation, schedule risk, financing assumptions, and downside-case cost modelling.
 Maintain a specific UAE focus while still explaining implications by broader country segment / region.
 Return only JSON matching the requested schema.
 Keep all narrative fields concise. Avoid long paragraphs; prefer 2-4 sentences per field.
@@ -273,9 +280,9 @@ def _build_llm_input(
 ) -> List[Dict[str, Any]]:
     """Build OpenAI Responses API input using clustering JSON plus graph images."""
     user_payload = {
-        "task": "Interpret country macro-risk clustering for renewable energy project implications.",
+        "task": "Interpret country macro-risk clustering for construction cost estimation and project delivery implications.",
         "focus_country": focus_country,
-        "asset_classes": DEFAULT_ASSET_CLASSES,
+        "construction_lenses": DEFAULT_CONSTRUCTION_LENSES,
         "regional_lens": DEFAULT_REGIONAL_LENS,
         "clustering_json": clustering_json,
     }
