@@ -565,7 +565,7 @@ def answer_question(
     top_k: int = 8,
     workstream: Optional[str] = None,
     corpus_pack_filter: Optional[str] = None,
-    max_output_tokens: int = 1200,
+    max_output_tokens: int = 5000,
     client_data_pack: Optional[str] = None,
     corpus_data_pack: Optional[str] = None,
 ) -> Dict[str, Any]:
