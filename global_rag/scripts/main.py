@@ -271,9 +271,9 @@ def country_arima_llm_call_api(
 
 @app.get(path="/ai_cost_estimation_chatbot", status_code=200)
 def ai_cost_estimation_chatbot_api(
-    q: str,
-    project_name: Optional[str] = None,
-    body_of_knowledge: Optional[str] = None,
+    q: str = "Summarize the key construction cost risks and mitigants for this project.",
+    project_name: Optional[str] = "synthetic_construction_cost_rag_pack",
+    body_of_knowledge: Optional[str] = "All",
     client_data_pack: Optional[str] = None,
     top_k: int = 8,
     workstream: Optional[str] = None,
@@ -282,10 +282,14 @@ def ai_cost_estimation_chatbot_api(
 ):
     try:
         chatbot_output = chatbot.answer_question(
-            question="Summarize the key construction cost risks and mitigants for this project.",
-            project_name="synthetic_construction_cost_rag_pack",
-            body_of_knowledge="All",
-            top_k=8,
+            question=q,
+            project_name=project_name,
+            body_of_knowledge=body_of_knowledge,
+            client_data_pack=client_data_pack,
+            top_k=top_k,
+            workstream=workstream,
+            corpus_pack_filter=corpus_pack_filter,
+            max_output_tokens=max_output_tokens,
         )
 
         api_response = JSONResponse(
