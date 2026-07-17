@@ -29,6 +29,8 @@ from __future__ import annotations
 import os
 import re
 import json
+import csv
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import create_engine, text
@@ -67,6 +69,13 @@ DEFAULT_CHATBOT_QUESTION = (
 )
 
 DB_SCHEMA = os.getenv("RAG_DB_SCHEMA", "public")
+BOK_SHORTNAME_DATASET_PATH = os.getenv(
+    "BOK_SHORTNAME_DATASET_PATH",
+    str(Path(__file__).resolve().parents[2] / "DOCUMENTS_DATASET_WITH_SHORT_NAMES.csv"),
+)
+BOK_DOCUMENT_COLUMN = "LIST OF CORPUS DOCUMENTS"
+BOK_SHORTNAME_COLUMN = "short_name"
+_BOK_SHORTNAME_INDEX: Optional[Dict[str, Dict[str, Any]]] = None
 
 
 # ---------------------------------------------------------------------
@@ -142,7 +151,121 @@ def _to_pgvector_literal(vector: List[float]) -> str:
 
 
 # ---------------------------------------------------------------------
-# 5. Retrieval
+# 5. Body-of-knowledge shortname helpers
+# ---------------------------------------------------------------------
+
+def _normalize_shortname(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip()).casefold()
+
+
+def _load_bok_shortname_index() -> Dict[str, Dict[str, Any]]:
+    """
+    Load the provided shortname mapping. This intentionally uses only
+    shortnames present in DOCUMENTS_DATASET_WITH_SHORT_NAMES.csv.
+    """
+    global _BOK_SHORTNAME_INDEX
+
+    if _BOK_SHORTNAME_INDEX is not None:
+        return _BOK_SHORTNAME_INDEX
+
+    csv_path = Path(BOK_SHORTNAME_DATASET_PATH)
+    if not csv_path.exists():
+        raise FileNotFoundError(f"BOK shortname dataset not found: {csv_path}")
+
+    shortname_index: Dict[str, Dict[str, Any]] = {}
+    with csv_path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        missing_columns = {
+            BOK_DOCUMENT_COLUMN,
+            BOK_SHORTNAME_COLUMN,
+        } - set(reader.fieldnames or [])
+        if missing_columns:
+            raise ValueError(
+                "BOK shortname dataset is missing required columns: "
+                + ", ".join(sorted(missing_columns))
+            )
+
+        for row in reader:
+            document_name = (row.get(BOK_DOCUMENT_COLUMN) or "").strip()
+            short_name = (row.get(BOK_SHORTNAME_COLUMN) or "").strip()
+            if not document_name or not short_name:
+                continue
+
+            normalized_short_name = _normalize_shortname(short_name)
+            entry = shortname_index.setdefault(
+                normalized_short_name,
+                {
+                    "short_name": short_name,
+                    "documents": [],
+                },
+            )
+            if document_name not in entry["documents"]:
+                entry["documents"].append(document_name)
+
+    _BOK_SHORTNAME_INDEX = shortname_index
+    return shortname_index
+
+
+def _parse_selected_shortnames(body_of_knowledge: Optional[str]) -> List[str]:
+    selected = (body_of_knowledge or "").strip()
+    if not selected or selected.upper() == "ALL":
+        return []
+
+    shortname_index = _load_bok_shortname_index()
+    if _normalize_shortname(selected) in shortname_index:
+        return [selected]
+
+    return [
+        part.strip()
+        for part in re.split(r"[,;/|]+", selected)
+        if part.strip()
+    ]
+
+
+def resolve_body_of_knowledge_selection(body_of_knowledge: Optional[str]) -> Dict[str, Any]:
+    """
+    Resolve a user-selected BOK shortname into the exact document filenames
+    provided by DOCUMENTS_DATASET_WITH_SHORT_NAMES.csv.
+    """
+    selected = (body_of_knowledge or "").strip()
+    if not selected or selected.upper() == "ALL":
+        return {
+            "requested": body_of_knowledge or "All",
+            "uses_all_corpus": True,
+            "matched_short_names": [],
+            "unmatched_short_names": [],
+            "matched_documents": [],
+        }
+
+    shortname_index = _load_bok_shortname_index()
+    requested_short_names = _parse_selected_shortnames(selected)
+    matched_short_names = []
+    unmatched_short_names = []
+    matched_documents = []
+
+    for requested_short_name in requested_short_names:
+        normalized_short_name = _normalize_shortname(requested_short_name)
+        entry = shortname_index.get(normalized_short_name)
+        if not entry:
+            unmatched_short_names.append(requested_short_name)
+            continue
+
+        matched_short_names.append(entry["short_name"])
+        for document_name in entry["documents"]:
+            if document_name not in matched_documents:
+                matched_documents.append(document_name)
+
+    return {
+        "requested": selected,
+        "uses_all_corpus": False,
+        "matched_short_names": matched_short_names,
+        "unmatched_short_names": unmatched_short_names,
+        "matched_documents": matched_documents,
+    }
+
+
+# ---------------------------------------------------------------------
+# 6. Retrieval
 # ---------------------------------------------------------------------
 
 def retrieve_relevant_chunks(
@@ -153,6 +276,7 @@ def retrieve_relevant_chunks(
     workstream: Optional[str] = None,
     corpus_pack_filter: Optional[str] = None,
     source_scope: str = "combined",
+    body_of_knowledge_document_names: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Retrieve relevant chunks from:
@@ -162,12 +286,18 @@ def retrieve_relevant_chunks(
     This prevents accidental leakage across client packs.
     """
 
-    query_embedding = _get_query_embedding(question)
-    query_vector = _to_pgvector_literal(query_embedding)
-
     body_of_knowledge = (body_of_knowledge or "").strip()
     if body_of_knowledge.upper() == "ALL":
         body_of_knowledge = ""
+
+    if body_of_knowledge and body_of_knowledge_document_names is None:
+        body_of_knowledge_selection = resolve_body_of_knowledge_selection(body_of_knowledge)
+        body_of_knowledge_document_names = body_of_knowledge_selection["matched_documents"]
+        if not body_of_knowledge_document_names:
+            return []
+
+    query_embedding = _get_query_embedding(question)
+    query_vector = _to_pgvector_literal(query_embedding)
 
     source_scope = (source_scope or "combined").strip().lower()
     if source_scope not in ["combined", "client_data", "corpus_data"]:
@@ -218,18 +348,28 @@ def retrieve_relevant_chunks(
             AND c.corpus_pack = :corpus_pack_filter
         """
 
-    if body_of_knowledge:
-        optional_filters += """
+    bok_document_names = [
+        document_name.strip()
+        for document_name in (body_of_knowledge_document_names or [])
+        if document_name and document_name.strip()
+    ]
+
+    if bok_document_names:
+        bok_filename_placeholders = []
+        bok_path_conditions = []
+        for idx, _ in enumerate(bok_document_names):
+            filename_param = f"bok_document_name_{idx}"
+            path_param = f"bok_document_path_pattern_{idx}"
+            bok_filename_placeholders.append(f":{filename_param}")
+            bok_path_conditions.append(f"d.relative_path ILIKE :{path_param}")
+            bok_path_conditions.append(f"c.source_reference ILIKE :{path_param}")
+
+        optional_filters += f"""
             AND (
-                c.corpus_pack ILIKE :body_of_knowledge_pattern
-                OR d.corpus_pack ILIKE :body_of_knowledge_pattern
-                OR d.file_name ILIKE :body_of_knowledge_pattern
-                OR d.document_title ILIKE :body_of_knowledge_pattern
-                OR d.relative_path ILIKE :body_of_knowledge_pattern
-                OR c.source_reference ILIKE :body_of_knowledge_pattern
+                d.file_name IN ({", ".join(bok_filename_placeholders)})
+                OR {" OR ".join(bok_path_conditions)}
             )
         """
-
     sql = text(f"""
         SELECT
             c.chunk_id,
@@ -288,8 +428,9 @@ def retrieve_relevant_chunks(
     if corpus_pack_filter:
         params["corpus_pack_filter"] = corpus_pack_filter
 
-    if body_of_knowledge:
-        params["body_of_knowledge_pattern"] = f"%{body_of_knowledge}%"
+    for idx, document_name in enumerate(bok_document_names):
+        params[f"bok_document_name_{idx}"] = document_name
+        params[f"bok_document_path_pattern_{idx}"] = f"%{document_name}%"
 
     with engine.connect() as conn:
         rows = conn.execute(sql, params).mappings().all()
@@ -622,6 +763,9 @@ def answer_question(
         top_k = 8
 
     selected_corpus_pack_filter = corpus_pack_filter or corpus_data_pack
+    body_of_knowledge_selection = resolve_body_of_knowledge_selection(
+        selected_body_of_knowledge or "All"
+    )
 
     project_chunks = retrieve_relevant_chunks(
         question=question,
@@ -633,15 +777,22 @@ def answer_question(
         source_scope="client_data",
     )
 
-    corpus_chunks = retrieve_relevant_chunks(
-        question=question,
-        project_name=project_name,
-        body_of_knowledge=selected_body_of_knowledge,
-        top_k=top_k,
-        workstream=workstream,
-        corpus_pack_filter=selected_corpus_pack_filter,
-        source_scope="corpus_data",
-    )
+    if (
+        not body_of_knowledge_selection["uses_all_corpus"]
+        and not body_of_knowledge_selection["matched_documents"]
+    ):
+        corpus_chunks = []
+    else:
+        corpus_chunks = retrieve_relevant_chunks(
+            question=question,
+            project_name=project_name,
+            body_of_knowledge=None if body_of_knowledge_selection["uses_all_corpus"] else selected_body_of_knowledge,
+            top_k=top_k,
+            workstream=workstream,
+            corpus_pack_filter=selected_corpus_pack_filter,
+            source_scope="corpus_data",
+            body_of_knowledge_document_names=body_of_knowledge_selection["matched_documents"],
+        )
 
     chunks = []
     seen_chunk_ids = set()
@@ -662,6 +813,7 @@ def answer_question(
             ),
             "project_name": project_name,
             "body_of_knowledge": body_of_knowledge or "All",
+            "body_of_knowledge_selection": body_of_knowledge_selection,
             "sources": [],
             "model": LLM_MODEL,
             "embedding_model": EMBEDDING_MODEL,
@@ -672,6 +824,7 @@ def answer_question(
                 "corpus_source_count": 0,
                 "workstream": workstream,
                 "corpus_pack_filter": selected_corpus_pack_filter,
+                "body_of_knowledge_selection": body_of_knowledge_selection,
             },
         }
 
@@ -693,6 +846,7 @@ def answer_question(
         "answer": answer,
         "project_name": project_name,
         "body_of_knowledge": body_of_knowledge or "All",
+        "body_of_knowledge_selection": body_of_knowledge_selection,
         "model": LLM_MODEL,
         "embedding_model": EMBEDDING_MODEL,
         "retrieval": {
@@ -701,6 +855,7 @@ def answer_question(
             "corpus_top_k": top_k,
             "workstream": workstream,
             "corpus_pack_filter": selected_corpus_pack_filter,
+            "body_of_knowledge_selection": body_of_knowledge_selection,
             "project_source_count": len(project_chunks),
             "corpus_source_count": len(corpus_chunks),
             "source_count": len(sources),
