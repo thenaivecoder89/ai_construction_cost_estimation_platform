@@ -77,7 +77,7 @@ LLM_OUTPUT_SCHEMA: Dict[str, Any] = {
                     "inflation_outlook": {"type": "string"},
                     "fx_depreciation_outlook": {"type": "string"},
                     "key_forecast_risks": {"type": "array", "items": {"type": "string"}},
-                    "investment_implication": {"type": "string"},
+                    "construction_sector_implication": {"type": "string"},
                 },
                 "required": [
                     "countryiso3code",
@@ -87,7 +87,7 @@ LLM_OUTPUT_SCHEMA: Dict[str, Any] = {
                     "inflation_outlook",
                     "fx_depreciation_outlook",
                     "key_forecast_risks",
-                    "investment_implication",
+                    "construction_sector_implication",
                 ],
             },
         },
@@ -119,14 +119,14 @@ LLM_OUTPUT_SCHEMA: Dict[str, Any] = {
                     "country": {"type": "string"},
                     "watchlist_reason": {"type": "string"},
                     "trigger_metric": {"type": "string"},
-                    "commercial_or_financing_implication": {"type": "string"},
+                    "construction_or_financing_implication": {"type": "string"},
                 },
                 "required": [
                     "countryiso3code",
                     "country",
                     "watchlist_reason",
                     "trigger_metric",
-                    "commercial_or_financing_implication",
+                    "construction_or_financing_implication",
                 ],
             },
         },
@@ -159,22 +159,23 @@ LLM_OUTPUT_SCHEMA: Dict[str, Any] = {
 
 
 SYSTEM_PROMPT = """
-You are a senior macroeconomic forecasting and infrastructure investment advisor.
+You are a senior macroeconomic forecasting, construction economics, and project controls advisor.
 
 You interpret annual ARIMA forecast outputs for country-level GDP growth, inflation, and FX depreciation.
 Use the forecast datasets and graph images as the source of truth.
 Do not invent countries, targets, forecast values, model orders, or benchmark results.
 
 Important interpretation rules:
-- GDP growth forecasts indicate expected growth momentum and demand backdrop.
-- Inflation forecasts indicate cost escalation, O&M pressure, and tariff indexation need.
-- FX depreciation forecasts indicate currency weakness, imported capex exposure, debt-service mismatch, and hedging need.
+- GDP growth forecasts indicate construction demand, project pipeline momentum, public/private sector appetite, and capacity pressure.
+- Inflation forecasts indicate construction cost escalation, materials and labour cost pressure, contingency adequacy, procurement timing risk, and indexation need.
+- FX depreciation forecasts indicate currency weakness, imported material/equipment exposure, supplier pricing risk, contract currency risk, and hedging need.
 - For FX, positive depreciation means the local currency weakens against USD.
 - Compare ARIMA forecasts against the naive benchmark where relevant.
 - Use forecast bands to discuss uncertainty, not just point forecasts.
 - Treat these as screening outputs because annual time series are short.
 
-Write for a client-facing investment, strategy, and due-diligence audience.
+Write for a client-facing construction cost estimation, project identification, design management, procurement, project controls, and due-diligence audience.
+Connect forecasts to country screening, project feasibility timing, early cost plan assumptions, design-to-budget discipline, escalation allowances, contingency, procurement route, contract risk allocation, imported input exposure, schedule risk, and downside-case cost modelling.
 Return only JSON matching the requested schema.
 """.strip()
 
@@ -251,7 +252,7 @@ def _build_llm_input(
             "Use forecast datasets and model summary as the primary source of truth.",
             "Use graph images as visual confirmation only; do not infer unsupported values from visuals.",
             "Comment on ARIMA forecast, naive benchmark, 80% and 95% forecast bands where material.",
-            "Emphasize implications for country screening, tariff indexation, FX assumptions, financing, and downside-case modelling.",
+            "Emphasize implications for country screening, project identification, cost plan assumptions, design-to-budget discipline, escalation allowances, procurement timing, FX exposure, financing assumptions, and downside-case cost modelling.",
         ],
     }
 
