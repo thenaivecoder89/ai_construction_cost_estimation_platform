@@ -278,7 +278,7 @@ def ai_cost_estimation_chatbot_api(
     top_k: int = 8,
     workstream: Optional[str] = None,
     corpus_pack_filter: Optional[str] = None,
-    max_output_tokens: int = 1200
+    max_output_tokens: int = 8000
 ):
     try:
         chatbot_output = chatbot.answer_question(
