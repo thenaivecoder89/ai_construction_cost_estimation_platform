@@ -11,6 +11,8 @@ import global_rag.scripts.country_arima_llm_call as arimallm
 from global_rag.scripts import investment_chatbot as chatbot
 
 import json
+import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,8 +36,92 @@ app.add_middleware(
 def health_check():
     return {"status": "ok", "message": "FastAPI service is running"}
 
+
+def stream_pipeline_call(operation_name, operation_func, heartbeat_seconds=15, **operation_kwargs):
+    start_time = time.time()
+
+    yield json.dumps(
+        {
+            "status": "started",
+            "output": {
+                "message": f"{operation_name} started.",
+                "operation": operation_name,
+                "elapsed_seconds": 0,
+                "parameters": operation_kwargs,
+            },
+        },
+        ensure_ascii=False,
+        default=str,
+    ) + "\n"
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(operation_func, **operation_kwargs)
+
+        while not future.done():
+            time.sleep(heartbeat_seconds)
+
+            if future.done():
+                break
+
+            elapsed_seconds = int(time.time() - start_time)
+            yield json.dumps(
+                {
+                    "status": "running",
+                    "output": {
+                        "message": f"{operation_name} is still running.",
+                        "operation": operation_name,
+                        "elapsed_seconds": elapsed_seconds,
+                        "heartbeat_seconds": heartbeat_seconds,
+                    },
+                },
+                ensure_ascii=False,
+                default=str,
+            ) + "\n"
+
+        try:
+            operation_output = future.result()
+        except Exception as exc:
+            elapsed_seconds = int(time.time() - start_time)
+            yield json.dumps(
+                {
+                    "status": "error",
+                    "output": {
+                        "message": f"{operation_name} failed.",
+                        "operation": operation_name,
+                        "elapsed_seconds": elapsed_seconds,
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc)[:2000],
+                    },
+                },
+                ensure_ascii=False,
+                default=str,
+            ) + "\n"
+            return
+
+        elapsed_seconds = int(time.time() - start_time)
+        yield json.dumps(
+            {
+                "status": "ok",
+                "output": operation_output,
+                "elapsed_seconds": elapsed_seconds,
+            },
+            ensure_ascii=False,
+            default=str,
+        ) + "\n"
+
 @app.get(path="/build_document_inventory", status_code=200)
-def build_doc_inv(client_data: str, rebuild_inventory: str = "Y"):
+def build_doc_inv(client_data: str, rebuild_inventory: str = "Y", stream: bool = True):
+    if stream:
+        return StreamingResponse(
+            stream_pipeline_call(
+                operation_name="build_document_inventory",
+                operation_func=bdi.build_document_inventory,
+                client_data=client_data,
+                rebuild_inventory=rebuild_inventory,
+            ),
+            media_type="application/x-ndjson",
+        )
+
     build_document_inventory_output = bdi.build_document_inventory(
         client_data=client_data,
         rebuild_inventory=rebuild_inventory
@@ -59,7 +145,18 @@ def debug_paths():
     }
 
 @app.get(path="/extract_documents", status_code=200)
-def extract_docs(client_data: str, rebuild_inventory: str = "Y"):
+def extract_docs(client_data: str, rebuild_inventory: str = "Y", stream: bool = True):
+    if stream:
+        return StreamingResponse(
+            stream_pipeline_call(
+                operation_name="extract_documents",
+                operation_func=ed.extract_documents,
+                client_data=client_data,
+                rebuild_inventory=rebuild_inventory,
+            ),
+            media_type="application/x-ndjson",
+        )
+
     extract_documents_output = ed.extract_documents(
         client_data=client_data,
         rebuild_inventory=rebuild_inventory
@@ -75,7 +172,17 @@ def extract_docs(client_data: str, rebuild_inventory: str = "Y"):
     return api_response
 
 @app.get(path="/chunk_documents", status_code=200)
-def chunk_docs(rebuild_inventory: str = "Y"):
+def chunk_docs(rebuild_inventory: str = "Y", stream: bool = True):
+    if stream:
+        return StreamingResponse(
+            stream_pipeline_call(
+                operation_name="chunk_documents",
+                operation_func=cd.chunk_documents,
+                rebuild_inventory=rebuild_inventory,
+            ),
+            media_type="application/x-ndjson",
+        )
+
     chunk_documents_output = cd.chunk_documents(
         rebuild_inventory=rebuild_inventory
     )
