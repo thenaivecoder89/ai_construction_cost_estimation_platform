@@ -22,3 +22,4 @@ matplotlib
 pydantic
 statsmodels
 google-cloud-storage
+extract-msg
