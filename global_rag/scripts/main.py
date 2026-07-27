@@ -5,6 +5,7 @@ import global_rag.scripts.chunk_documents as cd
 import global_rag.scripts.embed_chunks as emb
 import global_rag.scripts.retrieve_chunks as ret
 import global_rag.scripts.report_generation as rg
+import global_rag.scripts.boq_generation as boq
 import global_rag.scripts.wb_scraper as wb
 import global_rag.scripts.country_macro_llm_call as cmllm
 import global_rag.scripts.country_arima_llm_call as arimallm
@@ -221,6 +222,23 @@ def start_embed_chunks(rebuild_inventory: str = "Y"):
     )
 
 
+@app.get(path="/generate_boq/start", status_code=202)
+def start_generate_boq(
+    project_id: str,
+    use_llm: bool = False,
+    write_workbook: bool = True,
+    max_llm_items: int = 250,
+):
+    return start_background_job(
+        operation_name="generate_boq",
+        operation_func=boq.generate_boq,
+        project_id=project_id,
+        use_llm=use_llm,
+        write_workbook=write_workbook,
+        max_llm_items=max_llm_items,
+    )
+
+
 def stream_pipeline_call(operation_name, operation_func, heartbeat_seconds=15, **operation_kwargs):
     start_time = time.time()
 
@@ -429,6 +447,47 @@ def embed_chunks(rebuild_inventory: str = "Y", stream: bool = True, live_stream:
     )
 
     return api_response
+
+
+@app.get(path="/generate_boq", status_code=200)
+def generate_boq_api(
+    project_id: str,
+    use_llm: bool = False,
+    write_workbook: bool = True,
+    max_llm_items: int = 250,
+    stream: bool = True,
+):
+    if stream:
+        return JSONResponse(
+            status_code=202,
+            content=jsonable_encoder(
+                start_background_job(
+                    operation_name="generate_boq",
+                    operation_func=boq.generate_boq,
+                    project_id=project_id,
+                    use_llm=use_llm,
+                    write_workbook=write_workbook,
+                    max_llm_items=max_llm_items,
+                )
+            ),
+        )
+
+    boq_output = boq.generate_boq(
+        project_id=project_id,
+        use_llm=use_llm,
+        write_workbook=write_workbook,
+        max_llm_items=max_llm_items,
+    )
+
+    return JSONResponse(
+        content=jsonable_encoder(
+            {
+                "status": "ok",
+                "output": boq_output,
+            }
+        )
+    )
+
 
 @app.get(path="/scrape_world_bank_wdi", status_code=200)
 def scrape_world_bank_wdi(
