@@ -12,15 +12,22 @@ from global_rag.scripts import investment_chatbot as chatbot
 
 import json
 import time
+import traceback
+import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+from threading import Lock
 from typing import Optional
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from starlette.responses import JSONResponse, StreamingResponse
 from pathlib import Path
 
 app = FastAPI()
+background_job_executor = ThreadPoolExecutor(max_workers=1)
+background_jobs = {}
+background_jobs_lock = Lock()
 
 config_base = cnfg.config_base()
 origins = config_base["allowed_origins"]
@@ -35,6 +42,183 @@ app.add_middleware(
 @app.get("/health", status_code=200)
 def health_check():
     return {"status": "ok", "message": "FastAPI service is running"}
+
+
+def utc_now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def elapsed_seconds_for_job(job_record):
+    end_time = job_record.get("completed_time") or time.time()
+    return int(end_time - job_record["started_time"])
+
+
+def public_job_record(job_id, include_result=False):
+    with background_jobs_lock:
+        job_record = background_jobs.get(job_id)
+
+        if job_record is None:
+            raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+
+        public_record = {
+            key: value
+            for key, value in job_record.items()
+            if key not in ["future", "started_time", "completed_time", "result"]
+        }
+        public_record["elapsed_seconds"] = elapsed_seconds_for_job(job_record)
+
+        if include_result:
+            public_record["result"] = job_record.get("result")
+
+        return public_record
+
+
+def run_background_job(job_id, operation_func, operation_kwargs):
+    with background_jobs_lock:
+        background_jobs[job_id].update(
+            {
+                "status": "running",
+                "message": "Job is running.",
+                "started_at": utc_now_iso(),
+                "updated_at": utc_now_iso(),
+            }
+        )
+
+    try:
+        result = operation_func(**operation_kwargs)
+
+        with background_jobs_lock:
+            background_jobs[job_id].update(
+                {
+                    "status": "completed",
+                    "message": "Job completed successfully.",
+                    "result": result,
+                    "completed_at": utc_now_iso(),
+                    "updated_at": utc_now_iso(),
+                    "completed_time": time.time(),
+                }
+            )
+
+    except Exception as exc:
+        with background_jobs_lock:
+            background_jobs[job_id].update(
+                {
+                    "status": "failed",
+                    "message": "Job failed.",
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc)[:4000],
+                    "traceback": traceback.format_exc()[-8000:],
+                    "completed_at": utc_now_iso(),
+                    "updated_at": utc_now_iso(),
+                    "completed_time": time.time(),
+                }
+            )
+
+
+def start_background_job(operation_name, operation_func, **operation_kwargs):
+    job_id = f"JOB_{uuid.uuid4().hex[:12]}"
+    created_at = utc_now_iso()
+
+    with background_jobs_lock:
+        background_jobs[job_id] = {
+            "job_id": job_id,
+            "operation": operation_name,
+            "status": "queued",
+            "message": "Job has been queued.",
+            "parameters": operation_kwargs,
+            "created_at": created_at,
+            "started_at": None,
+            "completed_at": None,
+            "updated_at": created_at,
+            "started_time": time.time(),
+            "completed_time": None,
+            "result": None,
+            "error_type": None,
+            "error_message": None,
+            "traceback": None,
+        }
+
+        future = background_job_executor.submit(
+            run_background_job,
+            job_id,
+            operation_func,
+            operation_kwargs,
+        )
+        background_jobs[job_id]["future"] = future
+
+    return {
+        "status": "queued",
+        "output": {
+            "job_id": job_id,
+            "operation": operation_name,
+            "message": "Job queued. Poll the status URL until status is completed or failed.",
+            "parameters": operation_kwargs,
+            "status_url": f"/pipeline_jobs/{job_id}",
+            "result_url": f"/pipeline_jobs/{job_id}/result",
+        },
+    }
+
+
+@app.get(path="/pipeline_jobs/{job_id}", status_code=200)
+def pipeline_job_status(job_id: str):
+    return {
+        "status": "ok",
+        "output": public_job_record(job_id=job_id, include_result=False),
+    }
+
+
+@app.get(path="/pipeline_jobs/{job_id}/result", status_code=200)
+def pipeline_job_result(job_id: str):
+    job_record = public_job_record(job_id=job_id, include_result=True)
+
+    if job_record["status"] not in ["completed", "failed"]:
+        return {
+            "status": "running",
+            "output": job_record,
+        }
+
+    return {
+        "status": "ok" if job_record["status"] == "completed" else "error",
+        "output": job_record,
+    }
+
+
+@app.get(path="/build_document_inventory/start", status_code=202)
+def start_build_doc_inv(client_data: str, rebuild_inventory: str = "Y"):
+    return start_background_job(
+        operation_name="build_document_inventory",
+        operation_func=bdi.build_document_inventory,
+        client_data=client_data,
+        rebuild_inventory=rebuild_inventory,
+    )
+
+
+@app.get(path="/extract_documents/start", status_code=202)
+def start_extract_docs(client_data: str, rebuild_inventory: str = "Y"):
+    return start_background_job(
+        operation_name="extract_documents",
+        operation_func=ed.extract_documents,
+        client_data=client_data,
+        rebuild_inventory=rebuild_inventory,
+    )
+
+
+@app.get(path="/chunk_documents/start", status_code=202)
+def start_chunk_docs(rebuild_inventory: str = "Y"):
+    return start_background_job(
+        operation_name="chunk_documents",
+        operation_func=cd.chunk_documents,
+        rebuild_inventory=rebuild_inventory,
+    )
+
+
+@app.get(path="/embed_chunks/start", status_code=202)
+def start_embed_chunks(rebuild_inventory: str = "Y"):
+    return start_background_job(
+        operation_name="embed_chunks",
+        operation_func=emb.embed_chunks,
+        rebuild_inventory=rebuild_inventory,
+    )
 
 
 def stream_pipeline_call(operation_name, operation_func, heartbeat_seconds=15, **operation_kwargs):
@@ -112,14 +296,16 @@ def stream_pipeline_call(operation_name, operation_func, heartbeat_seconds=15, *
 @app.get(path="/build_document_inventory", status_code=200)
 def build_doc_inv(client_data: str, rebuild_inventory: str = "Y", stream: bool = True):
     if stream:
-        return StreamingResponse(
-            stream_pipeline_call(
-                operation_name="build_document_inventory",
-                operation_func=bdi.build_document_inventory,
-                client_data=client_data,
-                rebuild_inventory=rebuild_inventory,
+        return JSONResponse(
+            status_code=202,
+            content=jsonable_encoder(
+                start_background_job(
+                    operation_name="build_document_inventory",
+                    operation_func=bdi.build_document_inventory,
+                    client_data=client_data,
+                    rebuild_inventory=rebuild_inventory,
+                )
             ),
-            media_type="application/x-ndjson",
         )
 
     build_document_inventory_output = bdi.build_document_inventory(
@@ -147,14 +333,16 @@ def debug_paths():
 @app.get(path="/extract_documents", status_code=200)
 def extract_docs(client_data: str, rebuild_inventory: str = "Y", stream: bool = True):
     if stream:
-        return StreamingResponse(
-            stream_pipeline_call(
-                operation_name="extract_documents",
-                operation_func=ed.extract_documents,
-                client_data=client_data,
-                rebuild_inventory=rebuild_inventory,
+        return JSONResponse(
+            status_code=202,
+            content=jsonable_encoder(
+                start_background_job(
+                    operation_name="extract_documents",
+                    operation_func=ed.extract_documents,
+                    client_data=client_data,
+                    rebuild_inventory=rebuild_inventory,
+                )
             ),
-            media_type="application/x-ndjson",
         )
 
     extract_documents_output = ed.extract_documents(
@@ -174,13 +362,15 @@ def extract_docs(client_data: str, rebuild_inventory: str = "Y", stream: bool = 
 @app.get(path="/chunk_documents", status_code=200)
 def chunk_docs(rebuild_inventory: str = "Y", stream: bool = True):
     if stream:
-        return StreamingResponse(
-            stream_pipeline_call(
-                operation_name="chunk_documents",
-                operation_func=cd.chunk_documents,
-                rebuild_inventory=rebuild_inventory,
+        return JSONResponse(
+            status_code=202,
+            content=jsonable_encoder(
+                start_background_job(
+                    operation_name="chunk_documents",
+                    operation_func=cd.chunk_documents,
+                    rebuild_inventory=rebuild_inventory,
+                )
             ),
-            media_type="application/x-ndjson",
         )
 
     chunk_documents_output = cd.chunk_documents(
@@ -197,8 +387,20 @@ def chunk_docs(rebuild_inventory: str = "Y", stream: bool = True):
     return api_response
 
 @app.get(path="/embed_chunks", status_code=200)
-def embed_chunks(rebuild_inventory: str = "Y", stream: bool = True):
+def embed_chunks(rebuild_inventory: str = "Y", stream: bool = True, live_stream: bool = False):
     if stream:
+        if not live_stream:
+            return JSONResponse(
+                status_code=202,
+                content=jsonable_encoder(
+                    start_background_job(
+                        operation_name="embed_chunks",
+                        operation_func=emb.embed_chunks,
+                        rebuild_inventory=rebuild_inventory,
+                    )
+                ),
+            )
+
         def event_stream():
             for status_update in emb.iter_embed_chunks(rebuild_inventory=rebuild_inventory):
                 yield json.dumps(

@@ -935,7 +935,7 @@ def extract_documents(client_data: str, rebuild_inventory: str = "Y"):
 
             elif file_extension == ".csv":
 
-                df = pd.read_csv(file_path)
+                df = pd.read_csv(file_path, low_memory=False)
                 df = clean_dataframe(df)
 
                 table_id = f"{document_id}_TBL_{table_counter:04d}"
