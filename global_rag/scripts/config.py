@@ -188,13 +188,19 @@ def sync_client_data_from_firebase(config_settings):
         return {
             "status": "skipped",
             "reason": "FIREBASE_SYNC_CLIENT_DATA is disabled.",
+            "client_data_layout": config_settings.get("client_data_layout"),
+            "firebase_prefix": config_settings.get("firebase_client_data_active_prefix"),
+            "local_dir": str(config_settings.get("active_client_data_dir")),
         }
 
-    return sync_firebase_storage_prefix(
+    sync_result = sync_firebase_storage_prefix(
         firebase_storage_bucket=config_settings["firebase_storage_bucket"],
         firebase_prefix=config_settings["firebase_client_data_active_prefix"],
         local_dir=config_settings["active_client_data_dir"],
     )
+    sync_result["client_data_layout"] = config_settings.get("client_data_layout")
+
+    return sync_result
 
 
 def sync_corpus_from_firebase(config_settings):
@@ -283,6 +289,7 @@ def config_paths(client_data: str):
     load_project_dotenv()
 
     # Project paths
+    repo_root = Path(__file__).resolve().parents[2]
     project_root = Path(__file__).resolve().parent.parent
     corpus_dir = Path(os.getenv("CORPUS_DIR", project_root / "corpus")).expanduser()
     client_data_dir = project_root / "client_data"
@@ -293,8 +300,9 @@ def config_paths(client_data: str):
     extracted_text_dir = output_dir / "extracted_text"
     findings_register_dir = output_dir / "findings_register"
 
-    # Resolving active client data folder
-    active_client_data_dir = client_data_dir / client_data
+    client_data = str(client_data or "").strip()
+    if client_data == "":
+        raise ValueError("client_data must be provided.")
 
     # Corpus packs are discovered dynamically after Firebase sync/local download.
     # The inventory scanner uses corpus_dir as the recursive scan root.
@@ -304,11 +312,47 @@ def config_paths(client_data: str):
     firebase_storage_bucket = required_env("FIREBASE_STORAGE_BUCKET")
     firebase_corpus_prefix = required_env("FIREBASE_CORPUS_PREFIX").strip("/")
     firebase_client_data_prefix = required_env("FIREBASE_CLIENT_DATA_PREFIX").strip("/")
-    firebase_client_data_active_prefix = (
-        f"{firebase_client_data_prefix}/{client_data}".strip("/")
-    )
     firebase_sync_client_data = bool_env("FIREBASE_SYNC_CLIENT_DATA", False)
     firebase_sync_corpus = bool_env("FIREBASE_SYNC_CORPUS", False)
+
+    # Client data can be stored either as legacy pack folders:
+    #   client_data/<client_data>/...
+    # or as the active project root:
+    #   client_data/Architecture/... and client_data/Structure/...
+    #
+    # CLIENT_DATA_LAYOUT may be set to "pack" or "root" in Railway.
+    # The repo name and neutral aliases are also accepted for the root layout
+    # so existing API clients can pass ai_construction_cost_estimation_platform.
+    configured_client_data_layout = os.getenv("CLIENT_DATA_LAYOUT", "").strip().lower()
+    root_layout_aliases = {
+        "client_data",
+        "root",
+        "all",
+        "ai_construction_cost_estimation_platform",
+        repo_root.name,
+    }
+
+    legacy_client_data_dir = client_data_dir / client_data
+
+    if configured_client_data_layout in ["root", "direct_root", "flat"]:
+        client_data_layout = "root"
+    elif configured_client_data_layout in ["pack", "legacy_pack", "client_pack"]:
+        client_data_layout = "pack"
+    elif client_data.lower() in root_layout_aliases:
+        client_data_layout = "root"
+    elif legacy_client_data_dir.exists():
+        client_data_layout = "pack"
+    else:
+        client_data_layout = "root"
+
+    if client_data_layout == "root":
+        active_client_data_dir = client_data_dir
+        firebase_client_data_active_prefix = firebase_client_data_prefix
+    else:
+        active_client_data_dir = legacy_client_data_dir
+        firebase_client_data_active_prefix = (
+            f"{firebase_client_data_prefix}/{client_data}".strip("/")
+        )
 
     # Client data packs
     client_data_packs = {
@@ -318,6 +362,7 @@ def config_paths(client_data: str):
     # File handling
     supported_text_extensions = [".txt", ".md"]
     supported_document_extensions = [".pdf", ".docx", ".pptx"]
+    supported_email_extensions = [".msg"]
     supported_table_extensions = [".csv", ".xlsx", ".xls"]
     supported_web_extensions = [".json", ".xml", ".html", ".svg"]
     supported_design_extensions = [".dxf"]
@@ -332,6 +377,7 @@ def config_paths(client_data: str):
     supported_file_types = (
         supported_text_extensions
         + supported_document_extensions
+        + supported_email_extensions
         + supported_table_extensions
         + supported_web_extensions
         + supported_design_extensions
@@ -360,6 +406,7 @@ def config_paths(client_data: str):
         print("Forensic RAG configuration loaded successfully!")
         print(f"Project root: {project_root}")
         print(f"Client data folder: {client_data_dir}")
+        print(f"Client data layout: {client_data_layout}")
         print(f"Active client data folder: {active_client_data_dir}")
         print(f"Corpus data folder: {corpus_dir}")
         print(f"Outputs folder:  {output_dir}")
@@ -370,6 +417,7 @@ def config_paths(client_data: str):
         "corpus_dir": corpus_dir,
         "client_data_dir": client_data_dir,
         "active_client_data_dir": active_client_data_dir,
+        "client_data_layout": client_data_layout,
         "output_dir": output_dir,
         "draft_report_dir": draft_report_dir,
         "exceptions_dir": exceptions_dir,

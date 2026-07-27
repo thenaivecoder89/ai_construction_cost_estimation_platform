@@ -188,6 +188,8 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
                 extraction_method_hint = "read_csv_table"
             elif file_ext in [".txt", ".md"]:
                 extraction_method_hint = "read_text_file"
+            elif file_ext == ".msg":
+                extraction_method_hint = "extract_msg_email_text"
             elif file_ext == ".html":
                 extraction_method_hint = "read_html_file"
             elif file_ext == ".json":
@@ -347,6 +349,7 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
         "client_data": client_data,
         "mode": "rebuild" if rebuild_inventory == "Y" else "update",
         "project_root": str(config_settings["project_root"]),
+        "client_data_layout": config_settings["client_data_layout"],
         "active_client_data_dir": str(config_settings["active_client_data_dir"]),
         "firebase_corpus_sync": firebase_corpus_sync,
         "firebase_client_data_sync": firebase_client_data_sync,

@@ -169,6 +169,59 @@ def extract_dxf_text(file_path):
     return clean_text("\n".join(text_parts))
 
 
+def extract_msg_email_text(file_path):
+    """
+    Extract text and metadata from Outlook .msg files.
+    Attachments are listed for traceability, but their binary contents are not
+    recursively parsed here; they should also be present as source files if they
+    need independent extraction.
+    """
+    try:
+        import extract_msg
+    except ModuleNotFoundError as e:
+        raise RuntimeError(
+            "extract-msg is required to extract Outlook .msg files. "
+            "Add extract-msg to requirements.txt and redeploy before processing .msg evidence."
+        ) from e
+
+    msg = extract_msg.Message(str(file_path))
+
+    try:
+        subject = clean_text(getattr(msg, "subject", ""))
+        sender = clean_text(getattr(msg, "sender", ""))
+        to_recipients = clean_text(getattr(msg, "to", ""))
+        cc_recipients = clean_text(getattr(msg, "cc", ""))
+        date = clean_text(getattr(msg, "date", ""))
+        body = clean_text(getattr(msg, "body", ""))
+        attachments = []
+
+        for attachment in getattr(msg, "attachments", []) or []:
+            attachment_name = clean_text(
+                getattr(attachment, "longFilename", "")
+                or getattr(attachment, "shortFilename", "")
+            )
+            if attachment_name:
+                attachments.append(attachment_name)
+
+        email_parts = [
+            f"Subject: {subject}",
+            f"From: {sender}",
+            f"To: {to_recipients}",
+            f"Cc: {cc_recipients}",
+            f"Date: {date}",
+            f"Attachments: {', '.join(attachments)}" if attachments else "Attachments: None",
+            "",
+            body,
+        ]
+
+        return clean_text("\n".join(email_parts))
+    finally:
+        try:
+            msg.close()
+        except Exception:
+            pass
+
+
 def image_mime_type(file_extension):
     if file_extension in [".jpg", ".jpeg"]:
         return "image/jpeg"
@@ -650,6 +703,22 @@ def extract_documents(client_data: str, rebuild_inventory: str = "Y"):
                     }
                 )
 
+            elif file_extension == ".msg":
+
+                msg_text = extract_msg_email_text(file_path)
+
+                text_rows.append(
+                    {
+                        "document_id": document_id,
+                        "page_no": None,
+                        "section_heading": "msg_email",
+                        "extraction_method": "extract_msg_email_text",
+                        "extraction_quality": "msg_text_extracted" if msg_text else "no_extractable_msg_text",
+                        "token_count_estimate": estimate_tokens(msg_text),
+                        "text_content": clean_text(msg_text),
+                    }
+                )
+
             elif file_extension == ".html":
 
                 html_content = file_path.read_text(
@@ -1119,6 +1188,7 @@ def extract_documents(client_data: str, rebuild_inventory: str = "Y"):
     return {
         "message": "Document extraction completed.",
         "client_data": client_data,
+        "client_data_layout": config_paths["client_data_layout"],
         "mode": "rebuild" if rebuild_inventory == "Y" else "update",
         "documents_processed": documents_processed,
         "documents_failed": documents_failed,
