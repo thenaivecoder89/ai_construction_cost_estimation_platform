@@ -68,6 +68,44 @@ STANDARD_SCOPE_TEMPLATES = [
     ("28", "280000", "Electronic safety and security systems", "Item"),
 ]
 
+BENCHMARK_RATE_AED = {
+    "03": {"m2": 180, "m3": 850, "ton": 4200, "Item": 25000, "L.S": 50000},
+    "04": {"m2": 190, "Lm": 120, "Item": 15000, "L.S": 25000},
+    "05": {"m2": 450, "Lm": 380, "kg": 14, "ton": 12500, "No.": 2500, "Item": 30000, "L.S": 50000},
+    "06": {"m2": 750, "Lm": 650, "No.": 3500, "Item": 35000, "L.S": 60000},
+    "07": {"m2": 95, "Lm": 85, "Item": 15000, "L.S": 30000},
+    "08": {"m2": 850, "No.": 2800, "Item": 30000, "L.S": 75000},
+    "09": {"m2": 110, "Lm": 75, "No.": 1200, "Item": 20000, "L.S": 40000},
+    "10": {"No.": 1200, "Item": 15000, "L.S": 30000},
+    "12": {"No.": 2500, "Lm": 850, "m2": 900, "Item": 25000, "L.S": 50000},
+    "14": {"No.": 180000, "Item": 180000, "L.S": 180000},
+    "21": {"No.": 850, "Lm": 140, "Item": 50000, "L.S": 120000},
+    "22": {"No.": 1200, "Lm": 180, "Item": 45000, "L.S": 100000},
+    "23": {"No.": 2500, "Lm": 220, "m2": 150, "Item": 65000, "L.S": 150000},
+    "26": {"No.": 1800, "Lm": 95, "Item": 75000, "L.S": 180000},
+    "27": {"No.": 900, "Lm": 65, "Item": 35000, "L.S": 80000},
+    "28": {"No.": 1400, "Lm": 80, "Item": 45000, "L.S": 100000},
+}
+
+PARAMETRIC_QUANTITY_ALLOWANCE = {
+    "03": {"m2": 500, "m3": 150, "ton": 18, "Item": 1, "L.S": 1},
+    "04": {"m2": 650, "Lm": 250, "Item": 1, "L.S": 1},
+    "05": {"m2": 75, "Lm": 120, "kg": 1200, "ton": 3, "No.": 8, "Item": 1, "L.S": 1},
+    "06": {"m2": 80, "Lm": 120, "No.": 10, "Item": 1, "L.S": 1},
+    "07": {"m2": 450, "Lm": 180, "Item": 1, "L.S": 1},
+    "08": {"m2": 120, "No.": 35, "Item": 1, "L.S": 1},
+    "09": {"m2": 900, "Lm": 250, "No.": 30, "Item": 1, "L.S": 1},
+    "10": {"No.": 20, "Item": 1, "L.S": 1},
+    "12": {"No.": 12, "Lm": 80, "m2": 50, "Item": 1, "L.S": 1},
+    "14": {"No.": 1, "Item": 1, "L.S": 1},
+    "21": {"No.": 80, "Lm": 300, "Item": 1, "L.S": 1},
+    "22": {"No.": 45, "Lm": 350, "Item": 1, "L.S": 1},
+    "23": {"No.": 35, "Lm": 450, "m2": 300, "Item": 1, "L.S": 1},
+    "26": {"No.": 120, "Lm": 700, "Item": 1, "L.S": 1},
+    "27": {"No.": 80, "Lm": 500, "Item": 1, "L.S": 1},
+    "28": {"No.": 60, "Lm": 350, "Item": 1, "L.S": 1},
+}
+
 
 def utc_now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -484,6 +522,110 @@ def template_items_for_division(division_code):
     return items
 
 
+def canonical_unit(unit):
+    unit_text = clean_text(unit)
+    lowered = unit_text.lower().replace(" ", "")
+
+    if lowered in ["m2", "m²", "sqm", "sq.m", "sq.m."]:
+        return "m2"
+    if lowered in ["m3", "m³", "cum", "cu.m", "cu.m."]:
+        return "m3"
+    if lowered in ["lm", "l.m", "l.m.", "m", "linear metre", "linear meter"]:
+        return "Lm"
+    if lowered in ["no", "no.", "nr", "nos", "number"]:
+        return "No."
+    if lowered in ["ls", "l.s", "l.s.", "lump sum", "lumpsum"]:
+        return "L.S"
+    if lowered in ["kg", "kilogram"]:
+        return "kg"
+    if lowered in ["ton", "tonne", "t"]:
+        return "ton"
+    if lowered in ["item", "sum"]:
+        return "Item"
+
+    return unit_text or "Item"
+
+
+def first_supported_number(value):
+    number = boq_v1.safe_float(value)
+    if number is not None:
+        return number
+
+    return None
+
+
+def benchmark_rate_for_item(item):
+    division_code = clean_text(item.get("division_code"))
+    unit = canonical_unit(item.get("unit"))
+    division_rates = BENCHMARK_RATE_AED.get(division_code, {})
+
+    if unit in division_rates:
+        return float(division_rates[unit])
+
+    if unit in ["Item", "L.S"]:
+        return float(division_rates.get("Item") or division_rates.get("L.S") or 25000)
+
+    return float(division_rates.get("Item") or 1000)
+
+
+def quantity_allowance_for_item(item):
+    division_code = clean_text(item.get("division_code"))
+    unit = canonical_unit(item.get("unit"))
+    division_quantities = PARAMETRIC_QUANTITY_ALLOWANCE.get(division_code, {})
+
+    if unit in division_quantities:
+        return float(division_quantities[unit])
+
+    if unit in ["Item", "L.S"]:
+        return 1.0
+
+    return 1.0
+
+
+def complete_numeric_estimates(items):
+    completed_items = []
+
+    for raw_item in items:
+        item = dict(raw_item)
+        quantity = first_supported_number(item.get("quantity"))
+        unit_rate = first_supported_number(item.get("unit_rate_aed"))
+        estimate_notes = []
+
+        if quantity is None or quantity == 0:
+            quantity = quantity_allowance_for_item(item)
+            estimate_notes.append(
+                f"Quantity estimated by BOQ v2 parametric allowance for Division {item.get('division_code')} / unit {canonical_unit(item.get('unit'))}: {quantity}."
+            )
+
+        if unit_rate is None or unit_rate == 0:
+            unit_rate = benchmark_rate_for_item(item)
+            estimate_notes.append(
+                f"Unit rate estimated by BOQ v2 benchmark fallback for Division {item.get('division_code')} / unit {canonical_unit(item.get('unit'))}: AED {unit_rate}."
+            )
+
+        item["quantity"] = float(quantity)
+        item["unit_rate_aed"] = float(unit_rate)
+        item["amount_aed"] = float(quantity) * float(unit_rate)
+
+        if estimate_notes:
+            existing_source = clean_text(item.get("source"))
+            item["source"] = " | ".join(part for part in [existing_source, *estimate_notes] if part)
+            existing_confidence = clean_text(item.get("confidence"))
+            if existing_confidence in ["", "low_scope_assumption", "very_low_assumed_scope", "needs_estimator_review"]:
+                item["confidence"] = "estimated_parametric_requires_review"
+            else:
+                item["confidence"] = f"{existing_confidence}_with_parametric_estimate"
+
+            measurement_basis = clean_text(item.get("measurement_basis"))
+            item["measurement_basis"] = " | ".join(
+                part for part in [measurement_basis, "BOQ v2 inserted numeric estimate because extracted evidence did not provide a directly auditable quantity/rate."] if part
+            )
+
+        completed_items.append(item)
+
+    return completed_items
+
+
 def compact_direct_items_for_division(direct_items, division_code, max_items=80):
     compact_items = []
     for item in direct_items:
@@ -527,14 +669,18 @@ Objective:
 - Produce a practical BOQ draft even when no client-authored BOQ exists.
 - Use client data as project facts.
 - Use corpus data only for measurement method, item templates, benchmark rate context and assumptions.
-- Do not claim exact measured quantities unless the client evidence gives quantities, dimensions, counts or schedules.
-- If quantity or rate is not supported, set it to 0 and explain the assumption/evidence limitation.
+- Populate quantity and unit_rate_aed with the best defensible numeric value available.
+- Use directly extracted quantities/rates first.
+- If exact measured quantities are unavailable, provide a conservative estimate from schedules, visible counts, dimensions, corpus measurement guidance or a clearly stated parametric allowance.
+- If project-specific rates are unavailable, provide a benchmark unit rate estimate from corpus/rate context and state that it requires estimator validation.
+- Do not present estimated values as exact measured quantities. The measurement_basis and rate_basis fields must say whether each number is direct, calculated, benchmarked or assumed.
 
 Allowed confidence/source modes:
 - high_client_boq_row: directly extracted from a client BOQ/schedule table with quantity and rate.
 - medium_client_schedule_calculated: calculated from client schedule/dimension evidence.
 - medium_benchmark_rate: client quantity with rate inferred from corpus/rate benchmark.
 - low_scope_assumption: scope inferred from drawings/specifications, quantity/rate not proven.
+- estimated_parametric_requires_review: numeric quantity/rate estimated from parametric allowances because evidence is incomplete.
 - needs_estimator_review: item is likely required but evidence is incomplete.
 
 Return JSON only with this schema:
@@ -559,6 +705,7 @@ Return JSON only with this schema:
 }}
 
 Limit items to {int(max_items_per_division)}. Prefer specific schedule-derived rows over generic scope rows.
+Every item must have numeric quantity and numeric unit_rate_aed values. Use 0 only if an item is genuinely non-priced or excluded; otherwise estimate and label it.
 
 Direct BOQ rows already extracted for this division, if any:
 {json.dumps(direct_items, ensure_ascii=False, default=str)}
@@ -758,15 +905,15 @@ def generate_boq_v2(
         max_items_per_division=max_items_per_division,
     )
 
-    items = boq_v1.dedupe_boq_items(llm_output["items"])
+    items = complete_numeric_estimates(boq_v1.dedupe_boq_items(llm_output["items"]))
     summary = boq_v1.summarize_items(items)
     generation_mode = build_generation_mode(evidence, items)
 
     quality_notes = [
         "BOQ v2 can generate a scope/takeoff draft without a client-authored BOQ file.",
         "Client documents remain the only source for project-specific facts. Corpus evidence is used for measurement rules, item templates, classification and rate benchmark context.",
-        "Quantities and rates are set to 0 where the client evidence does not support an auditable calculation or benchmark.",
-        "Rows marked low_scope_assumption, very_low_assumed_scope or needs_estimator_review require estimator validation before commercial use.",
+        "Where direct quantities/rates are unavailable, BOQ v2 now inserts numeric parametric or benchmark estimates instead of zero values.",
+        "Rows marked estimated_parametric_requires_review, low_scope_assumption, very_low_assumed_scope or needs_estimator_review require estimator validation before commercial use.",
         "This is not a replacement for a full CAD/BIM quantity takeoff where drawing geometry, scale and dimensions are unavailable in extracted text/tables.",
     ]
     for assumption in llm_output["assumptions"][:30]:
