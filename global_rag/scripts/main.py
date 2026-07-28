@@ -6,6 +6,7 @@ import global_rag.scripts.embed_chunks as emb
 import global_rag.scripts.retrieve_chunks as ret
 import global_rag.scripts.report_generation as rg
 import global_rag.scripts.boq_generation as boq
+import global_rag.scripts.boq_analysis as boqa
 import global_rag.scripts.wb_scraper as wb
 import global_rag.scripts.country_macro_llm_call as cmllm
 import global_rag.scripts.country_arima_llm_call as arimallm
@@ -22,7 +23,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
-from starlette.responses import JSONResponse, StreamingResponse
+from starlette.responses import FileResponse, JSONResponse, StreamingResponse
 from pathlib import Path
 
 app = FastAPI()
@@ -169,7 +170,7 @@ def pipeline_job_status(job_id: str):
 
 
 @app.get(path="/pipeline_jobs/{job_id}/result", status_code=200)
-def pipeline_job_result(job_id: str):
+def pipeline_job_result(job_id: str, download_file: bool = False):
     job_record = public_job_record(job_id=job_id, include_result=True)
 
     if job_record["status"] not in ["completed", "failed"]:
@@ -177,6 +178,25 @@ def pipeline_job_result(job_id: str):
             "status": "running",
             "output": job_record,
         }
+
+    if download_file and job_record["status"] == "completed":
+        result = job_record.get("result") or {}
+        output_files = result.get("output_files") or {}
+        xlsx_path = output_files.get("xlsx_path")
+
+        if job_record.get("operation") == "generate_boq" and xlsx_path:
+            xlsx_path = Path(xlsx_path)
+            if xlsx_path.exists():
+                return FileResponse(
+                    path=str(xlsx_path),
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    filename=xlsx_path.name,
+                )
+
+            raise HTTPException(
+                status_code=404,
+                detail=f"Generated BOQ workbook is not available on this Railway container: {xlsx_path}",
+            )
 
     return {
         "status": "ok" if job_record["status"] == "completed" else "error",
@@ -225,17 +245,31 @@ def start_embed_chunks(rebuild_inventory: str = "Y"):
 @app.get(path="/generate_boq/start", status_code=202)
 def start_generate_boq(
     project_id: str,
-    use_llm: bool = False,
     write_workbook: bool = True,
-    max_llm_items: int = 250,
 ):
     return start_background_job(
         operation_name="generate_boq",
         operation_func=boq.generate_boq,
         project_id=project_id,
-        use_llm=use_llm,
         write_workbook=write_workbook,
-        max_llm_items=max_llm_items,
+    )
+
+
+@app.get(path="/analyze_boq/start", status_code=202)
+@app.get(path="/boq_analysis/start", status_code=202)
+def start_analyze_boq(
+    project_id: str,
+    boq_run_id: Optional[str] = None,
+    write_report: bool = True,
+    max_items_for_prompt: int = 300,
+):
+    return start_background_job(
+        operation_name="analyze_boq",
+        operation_func=boqa.generate_boq_analysis,
+        project_id=project_id,
+        boq_run_id=boq_run_id,
+        write_report=write_report,
+        max_items_for_prompt=max_items_for_prompt,
     )
 
 
@@ -452,9 +486,7 @@ def embed_chunks(rebuild_inventory: str = "Y", stream: bool = True, live_stream:
 @app.get(path="/generate_boq", status_code=200)
 def generate_boq_api(
     project_id: str,
-    use_llm: bool = False,
     write_workbook: bool = True,
-    max_llm_items: int = 250,
     stream: bool = True,
 ):
     if stream:
@@ -465,18 +497,14 @@ def generate_boq_api(
                     operation_name="generate_boq",
                     operation_func=boq.generate_boq,
                     project_id=project_id,
-                    use_llm=use_llm,
                     write_workbook=write_workbook,
-                    max_llm_items=max_llm_items,
                 )
             ),
         )
 
     boq_output = boq.generate_boq(
         project_id=project_id,
-        use_llm=use_llm,
         write_workbook=write_workbook,
-        max_llm_items=max_llm_items,
     )
 
     return JSONResponse(
@@ -484,6 +512,47 @@ def generate_boq_api(
             {
                 "status": "ok",
                 "output": boq_output,
+            }
+        )
+    )
+
+
+@app.get(path="/analyze_boq", status_code=200)
+@app.get(path="/boq_analysis", status_code=200)
+def analyze_boq_api(
+    project_id: str,
+    boq_run_id: Optional[str] = None,
+    write_report: bool = True,
+    max_items_for_prompt: int = 300,
+    stream: bool = True,
+):
+    if stream:
+        return JSONResponse(
+            status_code=202,
+            content=jsonable_encoder(
+                start_background_job(
+                    operation_name="analyze_boq",
+                    operation_func=boqa.generate_boq_analysis,
+                    project_id=project_id,
+                    boq_run_id=boq_run_id,
+                    write_report=write_report,
+                    max_items_for_prompt=max_items_for_prompt,
+                )
+            ),
+        )
+
+    analysis_output = boqa.generate_boq_analysis(
+        project_id=project_id,
+        boq_run_id=boq_run_id,
+        write_report=write_report,
+        max_items_for_prompt=max_items_for_prompt,
+    )
+
+    return JSONResponse(
+        content=jsonable_encoder(
+            {
+                "status": "ok",
+                "output": analysis_output,
             }
         )
     )

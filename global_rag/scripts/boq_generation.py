@@ -8,7 +8,6 @@ import hashlib
 from pathlib import Path
 from datetime import datetime, timezone
 
-from openai import OpenAI
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -383,7 +382,7 @@ def extract_boq_items_from_table_rows(table_rows):
         quantity = get_value_by_terms(row_dict, ["quantity", "qty"])
         rate = get_value_by_terms(row_dict, ["rate", "unit rate"])
 
-        if len(values) >= 8:
+        if len(values) >= 7:
             if current_division_code is None:
                 current_division_code = infer_division_code(values[0], row_text)
             if item_code is None:
@@ -504,155 +503,6 @@ def build_minimum_scope_items():
         )
         for division_code, section_code, item_code, description, unit in scope_seed
     ]
-
-
-def compact_evidence_for_llm(evidence_packets, max_chars=30000):
-    parts = []
-    for packet_key, packet in evidence_packets.items():
-        parts.append(f"\n[{packet_key}]")
-        for result in packet.get("results", [])[:10]:
-            source = get_source_reference(result)
-            parts.append(
-                f"Source {source.get('chunk_id')} {source.get('document_id')} "
-                f"{source.get('corpus_zone')} {source.get('section_heading')}: "
-                f"{clean_text(result.get('chunk_text'))[:1200]}"
-            )
-
-    return "\n".join(parts)[:max_chars]
-
-
-def parse_json_from_response_text(value):
-    value = clean_text(value)
-    if not value:
-        return None
-
-    try:
-        return json.loads(value)
-    except Exception:
-        pass
-
-    match = re.search(r"(\{.*\})", value, flags=re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(1))
-        except Exception:
-            return None
-
-    return None
-
-
-def generate_llm_boq_items(config_base, project_id, seed_items, evidence_packets, max_items=250):
-    openai_api_key = config_base.get("openai_api_key")
-    if not openai_api_key:
-        return {
-            "status": "skipped",
-            "reason": "OPENAI_API_KEY is not configured.",
-            "items": [],
-        }
-
-    client = OpenAI(api_key=openai_api_key)
-    model = config_base.get("llm_model", "gpt-4.1-mini")
-
-    seed_items_compact = [
-        {
-            "division_code": item.get("division_code"),
-            "section_code": item.get("section_code"),
-            "item_code": item.get("item_code"),
-            "description": item.get("description"),
-            "unit": item.get("unit"),
-            "quantity": item.get("quantity"),
-            "unit_rate_aed": item.get("unit_rate_aed"),
-            "source": item.get("source"),
-        }
-        for item in seed_items[:max_items]
-    ]
-
-    prompt = f"""
-You are a senior quantity surveyor generating a construction Bill of Quantities for {project_id}.
-
-Use client evidence first. Use corpus evidence only to improve classification, measurement wording,
-unit selection, benchmark flags, and completeness checks. Do not invent exact quantities or rates
-where client evidence is missing.
-
-Return JSON only with this shape:
-{{
-  "boq_items": [
-    {{
-      "division_code": "03",
-      "section_code": "033000",
-      "item_code": "1000",
-      "description": "BOQ item description",
-      "unit": "m2",
-      "quantity": 123.0,
-      "unit_rate_aed": 45.0,
-      "source": "brief source note",
-      "confidence": "high|medium|low"
-    }}
-  ],
-  "quality_notes": ["note"]
-}}
-
-Seed BOQ rows:
-{json.dumps(seed_items_compact, ensure_ascii=False)}
-
-Retrieved evidence:
-{compact_evidence_for_llm(evidence_packets)}
-"""
-
-    response = client.responses.create(
-        model=model,
-        input=[
-            {
-                "role": "system",
-                "content": "Return only valid JSON. Do not use markdown fences.",
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        max_output_tokens=16000,
-        store=False,
-    )
-
-    response_text = getattr(response, "output_text", "")
-    parsed = parse_json_from_response_text(response_text)
-    if not parsed:
-        return {
-            "status": "failed",
-            "reason": "LLM response did not contain valid JSON.",
-            "items": [],
-            "raw_response_preview": response_text[:1000],
-        }
-
-    normalized_items = []
-    for item in parsed.get("boq_items", [])[:max_items]:
-        division_code = clean_text(item.get("division_code"))
-        if division_code not in DIVISION_BY_CODE:
-            continue
-
-        if not clean_text(item.get("description")) or not clean_text(item.get("unit")):
-            continue
-
-        normalized_items.append(
-            make_boq_item(
-                division_code=division_code,
-                section_code=item.get("section_code"),
-                item_code=item.get("item_code"),
-                description=item.get("description"),
-                unit=item.get("unit"),
-                quantity=item.get("quantity"),
-                unit_rate=item.get("unit_rate_aed"),
-                source=item.get("source"),
-                confidence=item.get("confidence", "medium_llm_synthesized"),
-            )
-        )
-
-    return {
-        "status": "ok",
-        "items": normalized_items,
-        "quality_notes": parsed.get("quality_notes", []),
-    }
 
 
 def dedupe_boq_items(items):
@@ -976,9 +826,7 @@ def summarize_items(items):
 
 def generate_boq(
     project_id,
-    use_llm=False,
     write_workbook=True,
-    max_llm_items=250,
 ):
     pack = config_pack(project_id)
     config_base = pack["config_base"]
@@ -1013,37 +861,20 @@ def generate_boq(
     if not seed_items:
         seed_items = build_minimum_scope_items()
 
-    llm_status = {"status": "not_requested", "items": [], "quality_notes": []}
-    if use_llm:
-        llm_status = generate_llm_boq_items(
-            config_base=config_base,
-            project_id=project_id,
-            seed_items=seed_items,
-            evidence_packets=evidence_packets,
-            max_items=max_llm_items,
-        )
-
-    if use_llm and llm_status.get("items"):
-        items = llm_status["items"]
-    else:
-        items = seed_items
-
-    items = dedupe_boq_items(items)
+    items = dedupe_boq_items(seed_items)
     summary = summarize_items(items)
 
     quality_notes = [
         "Client BOQ/extracted table rows are preferred over inferred RAG text.",
         "Corpus evidence is used for classification, measurement discipline and benchmark context; it does not override client quantities without evidence.",
         "Blank quantities or rates indicate unavailable client evidence and require estimator review.",
+        "LLM generation is intentionally disabled in boq_generation.py; use boq_analysis.py for LLM review and interpretation.",
     ]
 
     if direct_table_status["items_extracted"] == 0:
         quality_notes.append(
             "No direct BOQ table rows were extracted from the database; workbook was generated from retrieved chunks or minimum scope scaffold."
         )
-
-    if use_llm:
-        quality_notes.extend(clean_text(note) for note in llm_status.get("quality_notes", []) if clean_text(note))
 
     output_files = {}
     if write_workbook:
@@ -1067,11 +898,7 @@ def generate_boq(
         "boq_generation_version": BOQ_GENERATION_VERSION,
         "generated_at": utc_now_iso(),
         "direct_table_status": direct_table_status,
-        "llm_status": {
-            key: value
-            for key, value in llm_status.items()
-            if key != "items"
-        },
+        "llm_status": {"status": "disabled", "reason": "LLM analysis is handled by boq_analysis.py."},
         "summary": summary,
         "quality_notes": quality_notes,
         "items": items,
@@ -1091,11 +918,7 @@ def generate_boq(
         "output_files": output_files,
         "summary": summary,
         "direct_table_status": direct_table_status,
-        "llm_status": {
-            key: value
-            for key, value in llm_status.items()
-            if key != "items"
-        },
+        "llm_status": {"status": "disabled", "reason": "LLM analysis is handled by boq_analysis.py."},
         "quality_notes": quality_notes,
     }
 
@@ -1105,7 +928,6 @@ if __name__ == "__main__":
         json.dumps(
             generate_boq(
                 project_id="ai_construction_cost_estimation_platform",
-                use_llm=False,
                 write_workbook=True,
             ),
             indent=2,
