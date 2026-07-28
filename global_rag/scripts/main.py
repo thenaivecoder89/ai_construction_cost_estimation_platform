@@ -6,6 +6,7 @@ import global_rag.scripts.embed_chunks as emb
 import global_rag.scripts.retrieve_chunks as ret
 import global_rag.scripts.report_generation as rg
 import global_rag.scripts.boq_generation as boq
+import global_rag.scripts.boq_generation_v2 as boqv2
 import global_rag.scripts.boq_analysis as boqa
 import global_rag.scripts.wb_scraper as wb
 import global_rag.scripts.country_macro_llm_call as cmllm
@@ -184,7 +185,7 @@ def pipeline_job_result(job_id: str, download_file: bool = False):
         output_files = result.get("output_files") or {}
         xlsx_path = output_files.get("xlsx_path")
 
-        if job_record.get("operation") == "generate_boq" and xlsx_path:
+        if job_record.get("operation") in ["generate_boq", "generate_boq_v2"] and xlsx_path:
             xlsx_path = Path(xlsx_path)
             if xlsx_path.exists():
                 return FileResponse(
@@ -252,6 +253,25 @@ def start_generate_boq(
         operation_func=boq.generate_boq,
         project_id=project_id,
         write_workbook=write_workbook,
+    )
+
+
+@app.get(path="/generate_boq_v2/start", status_code=202)
+def start_generate_boq_v2(
+    project_id: str,
+    write_workbook: bool = True,
+    max_items_per_division: int = 50,
+    text_row_limit: int = 600,
+    table_row_limit: int = 2500,
+):
+    return start_background_job(
+        operation_name="generate_boq_v2",
+        operation_func=boqv2.generate_boq_v2,
+        project_id=project_id,
+        write_workbook=write_workbook,
+        max_items_per_division=max_items_per_division,
+        text_row_limit=text_row_limit,
+        table_row_limit=table_row_limit,
     )
 
 
@@ -505,6 +525,49 @@ def generate_boq_api(
     boq_output = boq.generate_boq(
         project_id=project_id,
         write_workbook=write_workbook,
+    )
+
+    return JSONResponse(
+        content=jsonable_encoder(
+            {
+                "status": "ok",
+                "output": boq_output,
+            }
+        )
+    )
+
+
+@app.get(path="/generate_boq_v2", status_code=200)
+def generate_boq_v2_api(
+    project_id: str,
+    write_workbook: bool = True,
+    max_items_per_division: int = 50,
+    text_row_limit: int = 600,
+    table_row_limit: int = 2500,
+    stream: bool = True,
+):
+    if stream:
+        return JSONResponse(
+            status_code=202,
+            content=jsonable_encoder(
+                start_background_job(
+                    operation_name="generate_boq_v2",
+                    operation_func=boqv2.generate_boq_v2,
+                    project_id=project_id,
+                    write_workbook=write_workbook,
+                    max_items_per_division=max_items_per_division,
+                    text_row_limit=text_row_limit,
+                    table_row_limit=table_row_limit,
+                )
+            ),
+        )
+
+    boq_output = boqv2.generate_boq_v2(
+        project_id=project_id,
+        write_workbook=write_workbook,
+        max_items_per_division=max_items_per_division,
+        text_row_limit=text_row_limit,
+        table_row_limit=table_row_limit,
     )
 
     return JSONResponse(

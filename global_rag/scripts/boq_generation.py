@@ -115,6 +115,17 @@ def safe_float(value):
         return None
 
 
+def numeric_value_or_zero(value):
+    number = safe_float(value)
+    if number is not None:
+        return number
+
+    if clean_text(value) == "-":
+        return 0.0
+
+    return clean_text(value)
+
+
 def safe_numeric_formula(value):
     formula = clean_text(value)
     if not formula.startswith("="):
@@ -335,8 +346,10 @@ def make_boq_item(
     source="",
     confidence="medium",
 ):
-    quantity_number = safe_float(quantity)
-    unit_rate_number = safe_float(unit_rate)
+    quantity_value = numeric_value_or_zero(quantity)
+    unit_rate_value = numeric_value_or_zero(unit_rate)
+    quantity_number = quantity_value if isinstance(quantity_value, (int, float)) else None
+    unit_rate_number = unit_rate_value if isinstance(unit_rate_value, (int, float)) else None
     amount = None
 
     if quantity_number is not None and unit_rate_number is not None:
@@ -349,8 +362,8 @@ def make_boq_item(
         "item_code": clean_text(item_code),
         "description": clean_text(description),
         "unit": clean_text(unit),
-        "quantity": quantity_number if quantity_number is not None else clean_text(quantity),
-        "unit_rate_aed": unit_rate_number if unit_rate_number is not None else clean_text(unit_rate),
+        "quantity": quantity_value,
+        "unit_rate_aed": unit_rate_value,
         "amount_aed": amount,
         "source": clean_text(source),
         "confidence": confidence,
