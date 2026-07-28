@@ -5,6 +5,7 @@
 import json
 import re
 import hashlib
+from difflib import SequenceMatcher
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -117,6 +118,18 @@ def clean_text(value):
 
 def normalize_text(value):
     return boq_v1.normalize_text(value)
+
+
+def normalize_division_code(value):
+    value_text = clean_text(value)
+    if value_text.isdigit():
+        return value_text.zfill(2)
+
+    number = boq_v1.safe_float(value_text)
+    if number is not None and float(number).is_integer():
+        return str(int(number)).zfill(2)
+
+    return value_text
 
 
 def make_run_id(project_id):
@@ -243,6 +256,56 @@ def fetch_client_table_rows(project_id, db_url, row_limit=2500):
         ).mappings().all()
 
     return [dict(row) for row in rows]
+
+
+def fetch_cost_database_rows(db_url, row_limit=10000):
+    engine = create_engine(db_url, pool_pre_ping=True)
+    sql = text(
+        """
+        SELECT
+            division_code,
+            section_code,
+            item_code,
+            section_heading,
+            description,
+            unit,
+            unit_rate_aed,
+            source_workbook,
+            sheet_name,
+            row_number
+        FROM cost_database
+        WHERE unit_rate_aed IS NOT NULL
+        LIMIT :row_limit;
+        """
+    )
+
+    with engine.begin() as conn:
+        rows = conn.execute(sql, {"row_limit": int(row_limit)}).mappings().all()
+
+    normalized_rows = []
+    for row in rows:
+        rate = first_supported_number(row.get("unit_rate_aed"))
+        if rate is None:
+            continue
+
+        division_code = normalize_division_code(row.get("division_code"))
+
+        normalized_rows.append(
+            {
+                "division_code": division_code,
+                "section_code": clean_text(row.get("section_code")),
+                "item_code": clean_text(row.get("item_code")),
+                "section_heading": clean_text(row.get("section_heading")),
+                "description": clean_text(row.get("description")),
+                "unit": canonical_unit(row.get("unit")),
+                "unit_rate_aed": float(rate),
+                "source_workbook": clean_text(row.get("source_workbook")),
+                "sheet_name": clean_text(row.get("sheet_name")),
+                "row_number": row.get("row_number"),
+            }
+        )
+
+    return normalized_rows
 
 
 def classify_evidence_record(record):
@@ -427,7 +490,14 @@ def build_project_evidence(project_id, config_base, text_row_limit=600, table_ro
     text_sections = []
     table_rows = []
     direct_boq_items = []
-    db_status = {"status": "not_attempted", "text_rows": 0, "table_rows": 0, "direct_boq_items": 0}
+    cost_database_rows = []
+    db_status = {
+        "status": "not_attempted",
+        "text_rows": 0,
+        "table_rows": 0,
+        "direct_boq_items": 0,
+        "cost_database_rates": 0,
+    }
 
     try:
         text_sections = fetch_client_text_sections(
@@ -445,11 +515,15 @@ def build_project_evidence(project_id, config_base, text_row_limit=600, table_ro
             db_url=config_base["db_url"],
         )
         direct_boq_items = boq_v1.extract_boq_items_from_table_rows(direct_rows)
+        cost_database_rows = fetch_cost_database_rows(
+            db_url=config_base["db_url"],
+        )
         db_status = {
             "status": "ok",
             "text_rows": len(text_sections),
             "table_rows": len(table_rows),
             "direct_boq_items": len(direct_boq_items),
+            "cost_database_rates": len(cost_database_rows),
         }
     except Exception as exc:
         db_status = {
@@ -457,6 +531,7 @@ def build_project_evidence(project_id, config_base, text_row_limit=600, table_ro
             "text_rows": len(text_sections),
             "table_rows": len(table_rows),
             "direct_boq_items": len(direct_boq_items),
+            "cost_database_rates": len(cost_database_rows),
             "error": f"{type(exc).__name__}: {str(exc)}",
         }
 
@@ -464,6 +539,7 @@ def build_project_evidence(project_id, config_base, text_row_limit=600, table_ro
         "text_sections": text_sections,
         "table_rows": table_rows,
         "direct_boq_items": direct_boq_items,
+        "cost_database_rows": cost_database_rows,
         "db_status": db_status,
         "text_prompt": compact_text_sections(text_sections),
         "table_prompt": compact_table_rows(table_rows),
@@ -554,8 +630,106 @@ def first_supported_number(value):
     return None
 
 
+def normalized_description_tokens(value):
+    text_value = normalize_text(value)
+    tokens = re.findall(r"[a-z0-9]+", text_value)
+    stop_words = {
+        "and", "or", "to", "the", "of", "for", "with", "including", "include",
+        "complete", "all", "as", "shown", "specified", "required", "where",
+        "work", "works", "supply", "install", "fix", "provide",
+    }
+    return {token for token in tokens if len(token) > 2 and token not in stop_words}
+
+
+def description_similarity(left, right):
+    left_text = normalize_text(left)
+    right_text = normalize_text(right)
+
+    if not left_text or not right_text:
+        return 0.0
+
+    left_tokens = normalized_description_tokens(left_text)
+    right_tokens = normalized_description_tokens(right_text)
+    token_score = 0.0
+    if left_tokens and right_tokens:
+        token_score = len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
+
+    sequence_score = SequenceMatcher(None, left_text[:240], right_text[:240]).ratio()
+    return (token_score * 0.65) + (sequence_score * 0.35)
+
+
+def find_cost_database_rate(item, cost_database_rows):
+    if not cost_database_rows:
+        return None
+
+    division_code = normalize_division_code(item.get("division_code"))
+
+    unit = canonical_unit(item.get("unit"))
+    description = clean_text(item.get("description"))
+    section_code = clean_text(item.get("section_code"))
+
+    candidates = []
+    for row in cost_database_rows:
+        if row.get("division_code") != division_code:
+            continue
+
+        unit_match = row.get("unit") == unit
+        if not unit_match and unit not in ["Item", "L.S"] and row.get("unit") not in ["Item", "L.S"]:
+            continue
+
+        score = description_similarity(description, row.get("description"))
+        if section_code and section_code == clean_text(row.get("section_code")):
+            score += 0.12
+        if unit_match:
+            score += 0.18
+
+        candidates.append((score, row))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda pair: pair[0], reverse=True)
+    best_score, best_row = candidates[0]
+    if best_score < 0.22:
+        return None
+
+    return {
+        "unit_rate_aed": float(best_row["unit_rate_aed"]),
+        "match_score": round(float(best_score), 4),
+        "matched_description": best_row.get("description"),
+        "matched_unit": best_row.get("unit"),
+        "matched_division_code": best_row.get("division_code"),
+        "matched_section_code": best_row.get("section_code"),
+        "matched_item_code": best_row.get("item_code"),
+        "source": (
+            f"cost_database: {best_row.get('source_workbook')}; "
+            f"sheet={best_row.get('sheet_name')}; row={best_row.get('row_number')}"
+        ),
+    }
+
+
+def compact_cost_database_for_division(cost_database_rows, division_code, max_rows=35):
+    compact_rows = []
+    for row in cost_database_rows:
+        if row.get("division_code") != division_code:
+            continue
+        compact_rows.append(
+            {
+                "section_code": row.get("section_code"),
+                "item_code": row.get("item_code"),
+                "description": row.get("description"),
+                "unit": row.get("unit"),
+                "unit_rate_aed": row.get("unit_rate_aed"),
+            }
+        )
+        if len(compact_rows) >= max_rows:
+            break
+
+    return compact_rows
+
+
 def benchmark_rate_for_item(item):
-    division_code = clean_text(item.get("division_code"))
+    division_code = normalize_division_code(item.get("division_code"))
     unit = canonical_unit(item.get("unit"))
     division_rates = BENCHMARK_RATE_AED.get(division_code, {})
 
@@ -569,7 +743,7 @@ def benchmark_rate_for_item(item):
 
 
 def quantity_allowance_for_item(item):
-    division_code = clean_text(item.get("division_code"))
+    division_code = normalize_division_code(item.get("division_code"))
     unit = canonical_unit(item.get("unit"))
     division_quantities = PARAMETRIC_QUANTITY_ALLOWANCE.get(division_code, {})
 
@@ -582,13 +756,15 @@ def quantity_allowance_for_item(item):
     return 1.0
 
 
-def complete_numeric_estimates(items):
+def complete_numeric_estimates(items, cost_database_rows=None):
     completed_items = []
+    cost_database_rows = cost_database_rows or []
 
     for raw_item in items:
         item = dict(raw_item)
         quantity = first_supported_number(item.get("quantity"))
         unit_rate = first_supported_number(item.get("unit_rate_aed"))
+        existing_confidence = clean_text(item.get("confidence"))
         estimate_notes = []
 
         if quantity is None or quantity == 0:
@@ -597,7 +773,19 @@ def complete_numeric_estimates(items):
                 f"Quantity estimated by BOQ v2 parametric allowance for Division {item.get('division_code')} / unit {canonical_unit(item.get('unit'))}: {quantity}."
             )
 
-        if unit_rate is None or unit_rate == 0:
+        cost_match = find_cost_database_rate(item, cost_database_rows)
+        can_replace_rate_with_cost_database = existing_confidence not in ["high_client_boq_row"]
+        if cost_match and can_replace_rate_with_cost_database:
+            unit_rate = cost_match["unit_rate_aed"]
+            item["cost_database_match"] = cost_match
+            estimate_notes.append(
+                "Unit rate selected from cost_database "
+                f"(match_score={cost_match['match_score']}; "
+                f"matched_item={cost_match.get('matched_item_code')}; "
+                f"matched_description={cost_match.get('matched_description')}; "
+                f"source={cost_match.get('source')}): AED {unit_rate}."
+            )
+        elif unit_rate is None or unit_rate == 0:
             unit_rate = benchmark_rate_for_item(item)
             estimate_notes.append(
                 f"Unit rate estimated by BOQ v2 benchmark fallback for Division {item.get('division_code')} / unit {canonical_unit(item.get('unit'))}: AED {unit_rate}."
@@ -610,8 +798,12 @@ def complete_numeric_estimates(items):
         if estimate_notes:
             existing_source = clean_text(item.get("source"))
             item["source"] = " | ".join(part for part in [existing_source, *estimate_notes] if part)
-            existing_confidence = clean_text(item.get("confidence"))
-            if existing_confidence in ["", "low_scope_assumption", "very_low_assumed_scope", "needs_estimator_review"]:
+            if item.get("cost_database_match"):
+                if existing_confidence in ["", "low_scope_assumption", "very_low_assumed_scope", "needs_estimator_review", "estimated_parametric_requires_review"]:
+                    item["confidence"] = "estimated_with_cost_database_rate_requires_review"
+                else:
+                    item["confidence"] = f"{existing_confidence}_with_cost_database_rate"
+            elif existing_confidence in ["", "low_scope_assumption", "very_low_assumed_scope", "needs_estimator_review"]:
                 item["confidence"] = "estimated_parametric_requires_review"
             else:
                 item["confidence"] = f"{existing_confidence}_with_parametric_estimate"
@@ -661,6 +853,10 @@ def generate_llm_items_for_division(
 ):
     query_hint = DIVISION_QUERY_HINTS.get(division_code, division_name)
     direct_items = compact_direct_items_for_division(evidence["direct_boq_items"], division_code)
+    cost_database_items = compact_cost_database_for_division(
+        evidence.get("cost_database_rows", []),
+        division_code,
+    )
 
     prompt = f"""
 Generate BOQ line items for project {project_id}, Division {division_code} - {division_name}.
@@ -671,6 +867,7 @@ Objective:
 - Use corpus data only for measurement method, item templates, benchmark rate context and assumptions.
 - Populate quantity and unit_rate_aed with the best defensible numeric value available.
 - Use directly extracted quantities/rates first.
+- For unit rates, prefer the provided cost_database rates for similar items in the same division/unit before using generic corpus benchmarks.
 - If exact measured quantities are unavailable, provide a conservative estimate from schedules, visible counts, dimensions, corpus measurement guidance or a clearly stated parametric allowance.
 - If project-specific rates are unavailable, provide a benchmark unit rate estimate from corpus/rate context and state that it requires estimator validation.
 - Do not present estimated values as exact measured quantities. The measurement_basis and rate_basis fields must say whether each number is direct, calculated, benchmarked or assumed.
@@ -710,6 +907,9 @@ Every item must have numeric quantity and numeric unit_rate_aed values. Use 0 on
 Direct BOQ rows already extracted for this division, if any:
 {json.dumps(direct_items, ensure_ascii=False, default=str)}
 
+Cost database unit-rate rows for this division:
+{json.dumps(cost_database_items, ensure_ascii=False, default=str)}
+
 Client extracted text evidence:
 {evidence["text_prompt"]}
 
@@ -730,7 +930,8 @@ Division-specific query hint:
                 "role": "system",
                 "content": (
                     "You are a senior quantity surveyor generating auditable BOQ drafts. "
-                    "Return strict JSON. Do not invent exact quantities or rates. Use 0 where evidence is insufficient."
+                    "Return strict JSON. Use cost database rates for comparable items where available. "
+                    "Estimated quantities/rates must be explicitly labelled as estimates in the basis fields."
                 ),
             },
             {
@@ -905,7 +1106,10 @@ def generate_boq_v2(
         max_items_per_division=max_items_per_division,
     )
 
-    items = complete_numeric_estimates(boq_v1.dedupe_boq_items(llm_output["items"]))
+    items = complete_numeric_estimates(
+        boq_v1.dedupe_boq_items(llm_output["items"]),
+        cost_database_rows=evidence.get("cost_database_rows", []),
+    )
     summary = boq_v1.summarize_items(items)
     generation_mode = build_generation_mode(evidence, items)
 
@@ -913,6 +1117,7 @@ def generate_boq_v2(
         "BOQ v2 can generate a scope/takeoff draft without a client-authored BOQ file.",
         "Client documents remain the only source for project-specific facts. Corpus evidence is used for measurement rules, item templates, classification and rate benchmark context.",
         "Where direct quantities/rates are unavailable, BOQ v2 now inserts numeric parametric or benchmark estimates instead of zero values.",
+        "Unit rates are selected from the cost_database table before the generic benchmark fallback is used.",
         "Rows marked estimated_parametric_requires_review, low_scope_assumption, very_low_assumed_scope or needs_estimator_review require estimator validation before commercial use.",
         "This is not a replacement for a full CAD/BIM quantity takeoff where drawing geometry, scale and dimensions are unavailable in extracted text/tables.",
     ]
