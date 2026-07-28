@@ -5,6 +5,8 @@
 import json
 import re
 import hashlib
+import ast
+import operator
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -17,7 +19,7 @@ from global_rag.scripts import config
 import global_rag.scripts.retrieve_chunks as ret
 
 
-BOQ_GENERATION_VERSION = "boq_generation_v1"
+BOQ_GENERATION_VERSION = "boq_generation_v2"
 REPORT_TYPE = "ai_boq_generation"
 CLASSIFICATION = "Confidential External"
 WORKSTREAM = "ai_construction_cost_estimation_platform"
@@ -62,6 +64,15 @@ DEFAULT_UNITS = {
     "Item": "Composite Measurement",
 }
 
+SAFE_FORMULA_OPERATORS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.USub: operator.neg,
+    ast.UAdd: operator.pos,
+}
+
 
 def utc_now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -94,7 +105,7 @@ def safe_float(value):
 
     try:
         if value.startswith("="):
-            return None
+            return safe_numeric_formula(value)
 
         value = value.replace(",", "")
         value = value.replace("AED", "")
@@ -102,6 +113,44 @@ def safe_float(value):
         return float(value)
     except Exception:
         return None
+
+
+def safe_numeric_formula(value):
+    formula = clean_text(value)
+    if not formula.startswith("="):
+        return None
+
+    expression = formula[1:].replace(",", "").strip()
+    if expression.startswith("+"):
+        expression = expression[1:].strip()
+
+    if not re.fullmatch(r"[0-9\.\+\-\*\/\(\)\s]+", expression):
+        return None
+
+    try:
+        node = ast.parse(expression, mode="eval")
+        return float(evaluate_numeric_ast(node.body))
+    except Exception:
+        return None
+
+
+def evaluate_numeric_ast(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
+
+    if isinstance(node, ast.Num):
+        return float(node.n)
+
+    if isinstance(node, ast.BinOp) and type(node.op) in SAFE_FORMULA_OPERATORS:
+        left = evaluate_numeric_ast(node.left)
+        right = evaluate_numeric_ast(node.right)
+        return SAFE_FORMULA_OPERATORS[type(node.op)](left, right)
+
+    if isinstance(node, ast.UnaryOp) and type(node.op) in SAFE_FORMULA_OPERATORS:
+        operand = evaluate_numeric_ast(node.operand)
+        return SAFE_FORMULA_OPERATORS[type(node.op)](operand)
+
+    raise ValueError("Unsupported numeric formula")
 
 
 def make_run_id(project_id):
@@ -359,6 +408,7 @@ def extract_boq_items_from_table_rows(table_rows):
     items = []
     current_division_code = None
     current_section_code = None
+    generated_item_counters = {}
 
     for row in table_rows:
         row_dict = row_data_to_dict(row.get("row_data"))
@@ -399,11 +449,28 @@ def extract_boq_items_from_table_rows(table_rows):
         item_code_text = clean_text(item_code)
         description_text = clean_text(description)
         unit_text = clean_text(unit)
+        quantity_text = clean_text(quantity)
+        rate_text = clean_text(rate)
 
         if current_division_code is None:
             continue
 
-        if item_code_text == "" or description_text == "" or unit_text == "":
+        if len(values) >= 4:
+            row_division_code = infer_division_code(values[0], row_text)
+            row_section_code = clean_text(values[1] if len(values) > 1 else "")
+            if (
+                row_division_code
+                and row_section_code
+                and description_text
+                and unit_text == ""
+                and quantity_text == ""
+                and rate_text == ""
+            ):
+                current_division_code = row_division_code
+                current_section_code = row_section_code
+                continue
+
+        if description_text == "" or unit_text == "":
             if description_text and not item_code_text:
                 section_match = re.search(r"\((\d{6})\)", description_text)
                 if section_match:
@@ -416,6 +483,11 @@ def extract_boq_items_from_table_rows(table_rows):
         section_code = current_section_code or clean_text(get_value_by_terms(row_dict, ["section"]))
         if not section_code:
             section_code = clean_text(values[1] if len(values) > 1 else "")
+
+        if not item_code_text:
+            counter_key = (current_division_code, section_code)
+            generated_item_counters[counter_key] = generated_item_counters.get(counter_key, 0) + 1
+            item_code_text = f"{section_code or current_division_code}-{generated_item_counters[counter_key]:03d}"
 
         items.append(
             make_boq_item(
@@ -582,7 +654,8 @@ def create_summary_sheet(wb, grouped_items, run_id, project_id):
         ws.cell(row=row_number, column=1, value=f"Division {division_code}")
         ws.cell(row=row_number, column=2, value=division_name)
         ws.cell(row=row_number, column=3, value=len(items))
-        ws.cell(row=row_number, column=4, value=f"='{sheet_name}'!H{max(8, len(items) + 8)}")
+        division_total_row = len(items) + 7
+        ws.cell(row=row_number, column=4, value=f"='{sheet_name}'!H{division_total_row}")
         style_money_cell(ws.cell(row=row_number, column=4))
         ws.cell(row=row_number, column=5, value="Client evidence preferred; blanks require estimator review.")
         row_number += 1
