@@ -261,8 +261,8 @@ def start_generate_boq_v2(
     project_id: str,
     write_workbook: bool = True,
     max_items_per_division: int = 50,
-    text_row_limit: int = 600,
-    table_row_limit: int = 2500,
+    text_row_limit: int = 2000,
+    table_row_limit: int = 5000,
 ):
     return start_background_job(
         operation_name="generate_boq_v2",
@@ -542,8 +542,8 @@ def generate_boq_v2_api(
     project_id: str,
     write_workbook: bool = True,
     max_items_per_division: int = 50,
-    text_row_limit: int = 600,
-    table_row_limit: int = 2500,
+    text_row_limit: int = 2000,
+    table_row_limit: int = 5000,
     stream: bool = True,
 ):
     if stream:

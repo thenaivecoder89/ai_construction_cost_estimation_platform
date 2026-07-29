@@ -9,6 +9,8 @@ openpyxl
 python-dotenv
 psycopg2-binary
 pymupdf
+pytesseract
+Pillow
 python-docx
 python-pptx
 beautifulsoup4

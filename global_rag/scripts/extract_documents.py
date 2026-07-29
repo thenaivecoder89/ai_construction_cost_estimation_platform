@@ -12,7 +12,7 @@
 # - Bare-bones POC version.
 # - No classes.
 # - No schema creation.
-# - No OCR. Scanned PDFs will be flagged as no_text_found_possible_scanned_pdf.
+# - PDF OCR is attempted for pages without enough native text when EXTRACT_PDF_OCR is enabled.
 
 from pathlib import Path
 import base64
@@ -287,6 +287,155 @@ def describe_image_file(file_path, file_extension, config_base):
         return clean_text(str(response))
 
 
+def extract_pdf_page_text_with_openai(page, config_base, page_no):
+    openai_api_key = config_base.get("openai_api_key")
+    if not openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY is required for OpenAI PDF OCR fallback.")
+
+    image_model = os.getenv(
+        "OPENAI_PDF_OCR_MODEL",
+        os.getenv("OPENAI_IMAGE_EXTRACTION_MODEL", config_base.get("llm_model", "gpt-4.1-mini")),
+    )
+    render_dpi = int(os.getenv("OPENAI_PDF_OCR_DPI", "180"))
+    scale = max(1.0, float(render_dpi) / 72.0)
+    pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+    image_base64 = base64.b64encode(pixmap.tobytes("png")).decode("ascii")
+
+    client = OpenAI(api_key=openai_api_key)
+    response = client.responses.create(
+        model=image_model,
+        input=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": (
+                            f"OCR this scanned PDF page {page_no}. Return only text visible on the page. "
+                            "Preserve construction drawings, schedules, BOQ descriptions, quantities, units, "
+                            "dimensions, labels, table text and notes as faithfully as possible. "
+                            "Do not summarize and do not invent unreadable text."
+                        ),
+                    },
+                    {
+                        "type": "input_image",
+                        "image_url": f"data:image/png;base64,{image_base64}",
+                    },
+                ],
+            }
+        ],
+        max_output_tokens=int(os.getenv("OPENAI_PDF_OCR_MAX_OUTPUT_TOKENS", "2000")),
+        store=False,
+    )
+
+    if hasattr(response, "output_text") and response.output_text:
+        return clean_text(response.output_text)
+
+    try:
+        return clean_text(response.output[0].content[0].text)
+    except Exception:
+        return clean_text(str(response))
+
+
+def extract_pdf_page_text(
+    page,
+    config_base,
+    page_no,
+    enable_ocr=True,
+    ocr_language="eng",
+    ocr_dpi=200,
+    min_native_chars=20,
+    ocr_provider="auto",
+):
+    native_text = clean_text(page.get_text("text"))
+
+    if len(native_text) >= int(min_native_chars):
+        return {
+            "text": native_text,
+            "method": "pymupdf_pdf_text",
+            "quality": "native_text_extracted",
+        }
+
+    if not enable_ocr:
+        return {
+            "text": native_text,
+            "method": "pymupdf_pdf_text",
+            "quality": "native_text_below_threshold_ocr_disabled" if native_text else "no_text_found_possible_scanned_pdf",
+        }
+
+    ocr_provider = clean_text(ocr_provider).lower() or "auto"
+
+    if not hasattr(page, "get_textpage_ocr"):
+        local_ocr_error = "ocr_api_unavailable"
+    else:
+        local_ocr_error = ""
+
+    if ocr_provider in ["auto", "pymupdf", "tesseract"] and not local_ocr_error:
+        try:
+            try:
+                text_page = page.get_textpage_ocr(
+                    language=ocr_language,
+                    dpi=int(ocr_dpi),
+                    full=True,
+                )
+            except TypeError:
+                text_page = page.get_textpage_ocr(
+                    language=ocr_language,
+                    dpi=int(ocr_dpi),
+                )
+
+            ocr_text = clean_text(page.get_text("text", textpage=text_page))
+
+            if ocr_text:
+                return {
+                    "text": ocr_text,
+                    "method": "pymupdf_pdf_ocr",
+                    "quality": "ocr_text_extracted",
+                }
+
+            local_ocr_error = "ocr_no_text_found"
+
+        except Exception:
+            local_ocr_error = "ocr_failed"
+
+    if ocr_provider in ["auto", "openai"]:
+        try:
+            openai_ocr_text = extract_pdf_page_text_with_openai(
+                page=page,
+                config_base=config_base,
+                page_no=page_no,
+            )
+
+            if openai_ocr_text:
+                return {
+                    "text": openai_ocr_text,
+                    "method": "openai_pdf_page_ocr",
+                    "quality": "ocr_text_extracted",
+                }
+
+            return {
+                "text": native_text,
+                "method": "openai_pdf_page_ocr",
+                "quality": "ocr_no_text_found_possible_scanned_pdf",
+            }
+
+        except Exception:
+            local_ocr_error = "openai_ocr_failed"
+
+    if ocr_provider in ["pymupdf", "tesseract"]:
+        return {
+            "text": native_text,
+            "method": "pymupdf_pdf_ocr",
+            "quality": f"{local_ocr_error}_possible_scanned_pdf" if local_ocr_error else "ocr_no_text_found_possible_scanned_pdf",
+        }
+
+    return {
+        "text": native_text,
+        "method": "pdf_ocr",
+        "quality": f"{local_ocr_error}_possible_scanned_pdf" if local_ocr_error else "ocr_no_text_found_possible_scanned_pdf",
+    }
+
+
 def sync_documents_from_inventory(engine):
     with engine.begin() as conn:
         conn.execute(
@@ -386,6 +535,11 @@ def extract_documents(client_data: str, rebuild_inventory: str = "Y"):
         pool_pre_ping=True
     )
     extract_pdf_tables = os.getenv("EXTRACT_PDF_TABLES", "N").strip().upper() == "Y"
+    extract_pdf_ocr = config.bool_env("EXTRACT_PDF_OCR", True)
+    pdf_ocr_provider = os.getenv("PDF_OCR_PROVIDER", "auto").strip().lower() or "auto"
+    pdf_ocr_language = os.getenv("PDF_OCR_LANGUAGE", "eng").strip() or "eng"
+    pdf_ocr_dpi = int(os.getenv("PDF_OCR_DPI", "200"))
+    pdf_ocr_min_native_chars = int(os.getenv("PDF_OCR_MIN_NATIVE_CHARS", "20"))
 
     # Important: extracted_text / extracted_tables depend on documents.document_id
     sync_documents_from_inventory(engine)
@@ -455,21 +609,25 @@ def extract_documents(client_data: str, rebuild_inventory: str = "Y"):
                 pdf_doc = fitz.open(str(file_path))
 
                 for page_no, page in enumerate(pdf_doc, start=1):
-                    page_text = page.get_text("text")
-                    cleaned_page_text = clean_text(page_text)
-
-                    if cleaned_page_text == "":
-                        extraction_quality = "no_text_found_possible_scanned_pdf"
-                    else:
-                        extraction_quality = "native_text_extracted"
+                    page_text_result = extract_pdf_page_text(
+                        page=page,
+                        config_base=config_base,
+                        page_no=page_no,
+                        enable_ocr=extract_pdf_ocr,
+                        ocr_language=pdf_ocr_language,
+                        ocr_dpi=pdf_ocr_dpi,
+                        min_native_chars=pdf_ocr_min_native_chars,
+                        ocr_provider=pdf_ocr_provider,
+                    )
+                    cleaned_page_text = page_text_result["text"]
 
                     text_rows.append(
                         {
                             "document_id": document_id,
                             "page_no": page_no,
                             "section_heading": f"page_{page_no}",
-                            "extraction_method": "pymupdf_pdf_text",
-                            "extraction_quality": extraction_quality,
+                            "extraction_method": page_text_result["method"],
+                            "extraction_quality": page_text_result["quality"],
                             "token_count_estimate": estimate_tokens(cleaned_page_text),
                             "text_content": cleaned_page_text,
                         }
