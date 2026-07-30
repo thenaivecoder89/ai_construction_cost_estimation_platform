@@ -1168,6 +1168,139 @@ def write_v2_audit_sheet(output_path, generation_payload):
     return output_path
 
 
+def fetch_boq_ready_takeoff_rows(project_id, db_url):
+    """
+    Return accepted measurements from the latest successful takeoff run.
+
+    BOQ v2 deliberately does not read drawings, OCR text, extracted text,
+    extracted tables or RAG chunks. Project quantities and their measurement
+    bases enter this program exclusively through takeoff_layer.
+    """
+    engine = create_engine(db_url, pool_pre_ping=True)
+    sql = text(
+        """
+        WITH latest_run AS (
+            SELECT takeoff_run_id
+            FROM takeoff_layer
+            WHERE project_id = :project_id
+              AND run_status = 'completed'
+              AND validation_status = 'accepted'
+              AND is_boq_ready = TRUE
+            ORDER BY created_at DESC
+            LIMIT 1
+        )
+        SELECT
+            t.takeoff_id,
+            t.takeoff_run_id,
+            t.division_code,
+            t.section_code,
+            t.item_code,
+            t.item_description,
+            t.takeoff_category,
+            t.quantity,
+            t.uom,
+            t.applicable_area,
+            t.element_type,
+            t.element_mark,
+            t.level_name,
+            t.zone_name,
+            t.calculation_method,
+            t.calculation_formula,
+            t.calculation_inputs,
+            t.calculation_logic,
+            t.theoretical_basis,
+            t.drawing_scale_text,
+            t.drawing_scale_ratio,
+            t.geometry_source,
+            t.geometry_data,
+            t.symbol_name,
+            t.symbol_count,
+            t.source_document_id,
+            t.source_file_name,
+            t.source_relative_path,
+            t.source_page,
+            t.source_sheet,
+            t.source_table_id,
+            t.source_row_numbers,
+            t.source_reference,
+            t.evidence_text,
+            t.extraction_method,
+            t.parser_name,
+            t.model_name,
+            t.confidence_score,
+            t.confidence_threshold,
+            t.confidence_basis
+        FROM takeoff_layer t
+        JOIN latest_run lr
+          ON lr.takeoff_run_id = t.takeoff_run_id
+        WHERE t.project_id = :project_id
+          AND t.run_status = 'completed'
+          AND t.validation_status = 'accepted'
+          AND t.is_boq_ready = TRUE
+          AND t.quantity > 0
+          AND t.confidence_score >= t.confidence_threshold
+        ORDER BY
+            t.division_code,
+            t.section_code NULLS LAST,
+            t.item_code NULLS LAST,
+            t.created_at,
+            t.takeoff_id
+        """
+    )
+    with engine.begin() as connection:
+        rows = connection.execute(sql, {"project_id": project_id}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def takeoff_rows_to_boq_items(takeoff_rows):
+    items = []
+    counters = {}
+    for row in takeoff_rows:
+        division_code = normalize_division_code(row.get("division_code"))
+        if division_code not in DIVISION_BY_CODE:
+            continue
+        counters[division_code] = counters.get(division_code, 0) + 1
+        sequence = counters[division_code]
+        section_code = clean_text(row.get("section_code")) or f"{division_code}0000"
+        item_code = clean_text(row.get("item_code")) or f"TO-{division_code}-{sequence:04d}"
+        quantity = first_supported_number(row.get("quantity"))
+        if quantity is None or quantity <= 0:
+            continue
+
+        source_parts = [
+            f"takeoff_id={row.get('takeoff_id')}",
+            f"takeoff_run_id={row.get('takeoff_run_id')}",
+            clean_text(row.get("source_reference")),
+            f"calculation={clean_text(row.get('calculation_formula'))}",
+            f"logic={clean_text(row.get('calculation_logic'))}",
+            f"theoretical_basis={clean_text(row.get('theoretical_basis'))}",
+            f"confidence={row.get('confidence_score')}",
+        ]
+        item = boq_v1.make_boq_item(
+            division_code=division_code,
+            section_code=section_code,
+            item_code=item_code,
+            description=clean_text(row.get("item_description")),
+            unit=canonical_unit(row.get("uom")),
+            quantity=quantity,
+            unit_rate=0,
+            source=" | ".join(part for part in source_parts if part),
+            confidence="high_takeoff_layer_accepted",
+        )
+        item["source_mode"] = "takeoff_layer"
+        item["takeoff_id"] = str(row.get("takeoff_id"))
+        item["takeoff_run_id"] = clean_text(row.get("takeoff_run_id"))
+        item["measurement_basis"] = clean_text(row.get("calculation_logic"))
+        item["rate_basis"] = ""
+        item["theoretical_basis"] = clean_text(row.get("theoretical_basis"))
+        item["calculation_formula"] = clean_text(row.get("calculation_formula"))
+        item["calculation_inputs"] = row.get("calculation_inputs") or {}
+        item["applicable_area"] = clean_text(row.get("applicable_area"))
+        item["confidence_score"] = float(row.get("confidence_score"))
+        items.append(item)
+    return items
+
+
 def generate_boq_v2(
     project_id,
     write_workbook=True,
@@ -1179,38 +1312,37 @@ def generate_boq_v2(
     config_base = pack["config_base"]
     run_id = make_run_id(project_id)
 
-    evidence = build_project_evidence(
+    # The existing API parameters remain accepted for front-end compatibility.
+    # max_items_per_division/text_row_limit/table_row_limit are intentionally not
+    # used: takeoff-layer validation and row readiness control BOQ eligibility.
+    takeoff_rows = fetch_boq_ready_takeoff_rows(
         project_id=project_id,
-        config_base=config_base,
-        text_row_limit=text_row_limit,
-        table_row_limit=table_row_limit,
+        db_url=config_base["db_url"],
     )
-    retrieval_evidence = collect_retrieval_evidence(project_id)
-    llm_output = generate_scope_items_with_llm(
-        project_id=project_id,
-        config_base=config_base,
-        evidence=evidence,
-        retrieval_evidence=retrieval_evidence,
-        max_items_per_division=max_items_per_division,
-    )
+    if not takeoff_rows:
+        raise RuntimeError(
+            f"No BOQ-ready takeoff rows found for project_id={project_id}. "
+            "Call /generate_boq_takeoff first and review accepted takeoff_layer rows."
+        )
 
+    cost_database_rows = fetch_cost_database_rows(db_url=config_base["db_url"])
+    takeoff_items = takeoff_rows_to_boq_items(takeoff_rows)
     items = complete_numeric_estimates(
-        boq_v1.dedupe_boq_items(llm_output["items"]),
-        cost_database_rows=evidence.get("cost_database_rows", []),
+        takeoff_items,
+        cost_database_rows=cost_database_rows,
     )
     summary = boq_v1.summarize_items(items)
-    generation_mode = build_generation_mode(evidence, items)
+    generation_mode = "takeoff_layer_mode"
+    takeoff_run_id = clean_text(takeoff_rows[0].get("takeoff_run_id"))
 
     quality_notes = [
-        "BOQ v2 can generate a scope/takeoff draft without a client-authored BOQ file.",
-        "Client documents remain the only source for project-specific facts. Corpus evidence is used for measurement rules, item templates and classification only.",
-        "Quantities are populated only from client_data; where client evidence does not support a quantity, BOQ v2 leaves quantity as 0.",
+        "BOQ v2 consumes project quantities only from accepted takeoff_layer rows.",
+        "Drawing rendering, OCR, schedule parsing, dimension/scale recognition, symbol counting and CAD/BIM ingestion are performed upstream by boq_takeoff_layer.py.",
+        "Only rows marked is_boq_ready with confidence_score at or above their confidence_threshold are included.",
+        "Every quantity retains its calculation formula, inputs, logic, theoretical basis, source reference and confidence in takeoff_layer.",
         "Unit rates are populated only from the cost_database table; where no comparable cost_database rate is found, BOQ v2 leaves unit_rate_aed as 0.",
-        "Rows marked low_scope_assumption, very_low_assumed_scope or needs_estimator_review require estimator validation before commercial use.",
-        "This is not a replacement for a full CAD/BIM quantity takeoff where drawing geometry, scale and dimensions are unavailable in extracted text/tables.",
+        "The legacy BOQ v2 document-text/RAG inference path is not used by this generation run.",
     ]
-    for assumption in llm_output["assumptions"][:30]:
-        quality_notes.append(f"LLM assumption: {assumption}")
 
     output_files = {}
     if write_workbook:
@@ -1220,7 +1352,7 @@ def generate_boq_v2(
             run_id=run_id,
             project_id=project_id,
             items=items,
-            evidence_packets=retrieval_evidence,
+            evidence_packets={},
             quality_notes=quality_notes,
         )
         write_v2_audit_sheet(xlsx_path, {})
@@ -1235,20 +1367,18 @@ def generate_boq_v2(
         "boq_generation_version": BOQ_GENERATION_V2_VERSION,
         "generated_at": utc_now_iso(),
         "generation_mode": generation_mode,
+        "takeoff_run_id": takeoff_run_id,
+        "takeoff_rows_consumed": len(takeoff_rows),
         "summary": summary,
         "items": items,
         "quality_notes": quality_notes,
-        "db_status": evidence["db_status"],
-        "division_generation_status": llm_output["division_status"],
-        "evidence_status": {
-            key: {
-                "status": packet.get("status"),
-                "query": packet.get("query"),
-                "results_returned": len(packet.get("results", [])),
-                "error": packet.get("error"),
-            }
-            for key, packet in retrieval_evidence.items()
+        "db_status": {
+            "status": "ok",
+            "takeoff_rows": len(takeoff_rows),
+            "cost_database_rates": len(cost_database_rows),
         },
+        "division_generation_status": [],
+        "evidence_status": {},
         "output_files": output_files,
     }
     json_path.write_text(json.dumps(output_payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
@@ -1260,10 +1390,12 @@ def generate_boq_v2(
         "run_id": run_id,
         "project_id": project_id,
         "generation_mode": generation_mode,
+        "takeoff_run_id": takeoff_run_id,
+        "takeoff_rows_consumed": len(takeoff_rows),
         "summary": summary,
-        "db_status": evidence["db_status"],
-        "division_generation_status": llm_output["division_status"],
-        "evidence_status": output_payload["evidence_status"],
+        "db_status": output_payload["db_status"],
+        "division_generation_status": [],
+        "evidence_status": {},
         "quality_notes": quality_notes,
         "output_files": output_files,
     }

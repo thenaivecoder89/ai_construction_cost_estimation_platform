@@ -7,6 +7,7 @@ import global_rag.scripts.retrieve_chunks as ret
 import global_rag.scripts.report_generation as rg
 import global_rag.scripts.boq_generation as boq
 import global_rag.scripts.boq_generation_v2 as boqv2
+import global_rag.scripts.boq_takeoff_layer as takeoff
 import global_rag.scripts.boq_analysis as boqa
 import global_rag.scripts.wb_scraper as wb
 import global_rag.scripts.country_macro_llm_call as cmllm
@@ -272,6 +273,15 @@ def start_generate_boq_v2(
         max_items_per_division=max_items_per_division,
         text_row_limit=text_row_limit,
         table_row_limit=table_row_limit,
+    )
+
+
+@app.get(path="/generate_boq_takeoff/start", status_code=202)
+def start_generate_boq_takeoff(project_id: str):
+    return start_background_job(
+        operation_name="generate_boq_takeoff",
+        operation_func=takeoff.generate_boq_takeoff,
+        project_id=project_id,
     )
 
 
@@ -575,6 +585,34 @@ def generate_boq_v2_api(
             {
                 "status": "ok",
                 "output": boq_output,
+            }
+        )
+    )
+
+
+@app.get(path="/generate_boq_takeoff", status_code=200)
+def generate_boq_takeoff_api(
+    project_id: str,
+    stream: bool = True,
+):
+    if stream:
+        return JSONResponse(
+            status_code=202,
+            content=jsonable_encoder(
+                start_background_job(
+                    operation_name="generate_boq_takeoff",
+                    operation_func=takeoff.generate_boq_takeoff,
+                    project_id=project_id,
+                )
+            ),
+        )
+
+    takeoff_output = takeoff.generate_boq_takeoff(project_id=project_id)
+    return JSONResponse(
+        content=jsonable_encoder(
+            {
+                "status": "ok",
+                "output": takeoff_output,
             }
         )
     )
