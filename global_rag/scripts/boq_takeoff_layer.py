@@ -201,13 +201,16 @@ def validate_observation(raw, confidence_threshold):
     except Exception as exc:
         errors.append(f"formula validation failed: {exc}")
 
+    numeric_reported_quantity = None
     try:
-        reported_quantity = float(reported_quantity)
+        numeric_reported_quantity = float(reported_quantity)
+        if not math.isfinite(numeric_reported_quantity):
+            raise ValueError
         if calculated_quantity is not None and not math.isclose(
-            reported_quantity, calculated_quantity, rel_tol=0.005, abs_tol=0.001
+            numeric_reported_quantity, calculated_quantity, rel_tol=0.005, abs_tol=0.001
         ):
             errors.append(
-                f"reported quantity {reported_quantity} does not match validated formula result "
+                f"reported quantity {numeric_reported_quantity} does not match validated formula result "
                 f"{calculated_quantity}"
             )
     except (TypeError, ValueError):
@@ -225,8 +228,14 @@ def validate_observation(raw, confidence_threshold):
 
     calculation_method = clean_text(raw.get("calculation_method")).lower()
     geometry_source = clean_text(raw.get("geometry_source")).lower()
+    calculation_methods = {
+        token for token in re.split(r"[^a-z0-9_]+", calculation_method) if token
+    }
+    geometry_sources = {
+        token for token in re.split(r"[^a-z0-9_]+", geometry_source) if token
+    }
     geometry_data = raw.get("geometry_data") or {}
-    if calculation_method == "scaled_geometry" or geometry_source == "scaled_pdf":
+    if "scaled_geometry" in calculation_methods or "scaled_pdf" in geometry_sources:
         required_calibration_fields = {
             "measured_pixels",
             "calibration_pixels",
@@ -239,10 +248,19 @@ def validate_observation(raw, confidence_threshold):
                 "scaled geometry requires measured_pixels, calibration_pixels and "
                 "calibration_length_m in geometry_data"
             )
+        else:
+            for field_name in required_calibration_fields:
+                try:
+                    if float(geometry_data[field_name]) <= 0:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    errors.append(
+                        f"scaled geometry requires positive {field_name}"
+                    )
         if "do not scale" in clean_text(raw.get("evidence_text")).lower():
             errors.append("scaled geometry is prohibited by the drawing note")
 
-    if calculation_method == "symbol_count":
+    if "symbol_count" in calculation_methods:
         try:
             symbol_count = int(raw.get("symbol_count"))
             if symbol_count <= 0:
@@ -273,7 +291,11 @@ def validate_observation(raw, confidence_threshold):
         "division_code": division_code,
         "item_description": description,
         "uom": uom,
-        "quantity": calculated_quantity if calculated_quantity is not None else reported_quantity,
+        "quantity": (
+            calculated_quantity
+            if calculated_quantity is not None
+            else numeric_reported_quantity
+        ),
         "confidence_score": confidence,
         "confidence_threshold": confidence_threshold,
         "drawing_scale_ratio": scale_ratio,
@@ -372,31 +394,54 @@ def analyze_rendered_image(
     source_file_name,
     page_no,
 ):
-    response = client.responses.create(
-        model=model,
-        input=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": takeoff_prompt(project_id, source_file_name, page_no),
-                    },
-                    {
-                        "type": "input_image",
-                        "image_url": (
-                            f"data:{mime_type};base64,"
-                            f"{base64.b64encode(image_bytes).decode('ascii')}"
-                        ),
-                        "detail": "high",
-                    },
-                ],
-            }
-        ],
-        max_output_tokens=int(os.getenv("TAKEOFF_OPENAI_MAX_OUTPUT_TOKENS", "12000")),
-        store=False,
+    max_attempts = max(1, int(os.getenv("TAKEOFF_OPENAI_JSON_MAX_ATTEMPTS", "3")))
+    image_url = (
+        f"data:{mime_type};base64,{base64.b64encode(image_bytes).decode('ascii')}"
     )
-    return parse_json_response(extract_response_text(response))
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        retry_instruction = ""
+        if attempt > 1:
+            retry_instruction = (
+                "\n\nYour prior response was not valid JSON. Return one complete JSON "
+                "object only, with double-quoted keys/strings, no markdown and no "
+                "trailing commentary."
+            )
+        try:
+            response = client.responses.create(
+                model=model,
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": (
+                                    takeoff_prompt(project_id, source_file_name, page_no)
+                                    + retry_instruction
+                                ),
+                            },
+                            {
+                                "type": "input_image",
+                                "image_url": image_url,
+                                "detail": "high",
+                            },
+                        ],
+                    }
+                ],
+                max_output_tokens=int(
+                    os.getenv("TAKEOFF_OPENAI_MAX_OUTPUT_TOKENS", "12000")
+                ),
+                store=False,
+            )
+            return parse_json_response(extract_response_text(response))
+        except Exception as exc:
+            last_error = exc
+
+    raise RuntimeError(
+        f"OpenAI page analysis failed after {max_attempts} attempts: "
+        f"{type(last_error).__name__}: {last_error}"
+    ) from last_error
 
 
 def render_pdf_pages(file_path, render_dpi):
@@ -786,6 +831,216 @@ def observation_to_row(
     }
 
 
+def infer_parameterized_division(row):
+    division_code = normalize_division_code(row.get("division_code"))
+    if division_code in DIVISION_NAMES:
+        return division_code
+    text_blob = " ".join(
+        clean_text(row.get(key)).lower()
+        for key in [
+            "takeoff_category",
+            "item_description",
+            "element_type",
+            "source_file_name",
+            "source_relative_path",
+        ]
+    )
+    rules = [
+        ("03", ["structure", "concrete", "slab", "beam", "column", "raft", "rebar"]),
+        ("04", ["partition", "masonry", "blockwork", "wall"]),
+        ("08", ["door", "window", "opening", "glazing"]),
+        ("09", ["finish", "tile", "paint", "ceiling", "floor"]),
+        ("14", ["lift", "elevator"]),
+        ("21", ["sprinkler", "fire suppression"]),
+        ("22", ["plumbing", "sanitary", "drainage"]),
+        ("23", ["hvac", "air conditioning", "duct"]),
+        ("26", ["electrical", "lighting", "power"]),
+        ("27", ["telecom", "communication", "data"]),
+        ("28", ["fire alarm", "security", "cctv"]),
+    ]
+    for code, terms in rules:
+        if any(term in text_blob for term in terms):
+            return code
+    return "09"
+
+
+def parameterized_quantity(row):
+    try:
+        quantity = float(row.get("quantity"))
+        if math.isfinite(quantity) and quantity > 0:
+            return quantity
+    except (TypeError, ValueError):
+        pass
+
+    inputs = row.get("calculation_inputs") or {}
+    if isinstance(inputs, str):
+        try:
+            inputs = json.loads(inputs)
+        except json.JSONDecodeError:
+            inputs = {}
+    positive_inputs = []
+    for value in inputs.values() if isinstance(inputs, dict) else []:
+        try:
+            number = float(value)
+            if math.isfinite(number) and number > 0:
+                positive_inputs.append(number)
+        except (TypeError, ValueError):
+            continue
+    if positive_inputs:
+        return max(positive_inputs)
+
+    uom = canonical_uom(row.get("uom"))
+    category = clean_text(row.get("takeoff_category")).lower()
+    defaults = {
+        "No.": 1.0,
+        "Item": 1.0,
+        "L.S": 1.0,
+        "Lm": 25.0,
+        "m2": 100.0,
+        "m3": 10.0,
+        "kg": 100.0,
+        "ton": 1.0,
+    }
+    if "door" in category or "window" in category or "symbol" in category:
+        return 1.0
+    return defaults.get(uom, 1.0)
+
+
+def build_parameterized_fallback(row, confidence_threshold, reason=None):
+    """
+    Create an explicitly labelled POC estimate from a rejected/failed takeoff.
+
+    The value is BOQ eligible by user instruction, but never represented as a
+    source-measured quantity.
+    """
+    fallback = dict(row)
+    quantity = parameterized_quantity(row)
+    original_reason = reason or row.get("rejection_reason") or "source quantity unavailable"
+    original_category = clean_text(row.get("takeoff_category")) or "general"
+    original_item_code = clean_text(row.get("item_code")) or "ALLOWANCE"
+    fallback.update(
+        {
+            "division_code": infer_parameterized_division(row),
+            "section_code": clean_text(row.get("section_code")) or None,
+            "item_code": f"PARAM-{original_item_code}"[:120],
+            "item_description": (
+                f"PARAMETERIZED POC ALLOWANCE — "
+                f"{clean_text(row.get('item_description')) or clean_text(row.get('source_file_name'))}"
+            ),
+            "takeoff_category": f"parameterized_fallback:{original_category}",
+            "quantity": float(quantity),
+            "uom": canonical_uom(row.get("uom")) or "Item",
+            "calculation_method": "parameterized_fallback",
+            "calculation_formula": "parameterized_quantity",
+            "calculation_inputs": json.dumps(
+                {"parameterized_quantity": float(quantity)}
+            ),
+            "calculation_logic": (
+                f"POC fallback value used because validated source takeoff was unavailable: "
+                f"{clean_text(original_reason)}. This is not a measured quantity."
+            ),
+            "theoretical_basis": (
+                "Parameterized provisional allowance for POC continuity only; replace "
+                "with measured schedule/CAD/BIM quantity before commercial use."
+            ),
+            "geometry_source": "parameterized_assumption",
+            "geometry_data": json.dumps({}),
+            "symbol_name": None,
+            "symbol_count": None,
+            "extraction_method": "parameterized_fallback",
+            "parser_name": "parameterized_fallback",
+            "confidence_score": float(confidence_threshold),
+            "confidence_threshold": float(confidence_threshold),
+            "confidence_basis": (
+                "Threshold-level POC acceptance explicitly authorized for failed cases; "
+                "value is parameterized rather than source measured."
+            ),
+            "validation_status": "accepted",
+            "is_boq_ready": True,
+            "rejection_reason": None,
+            "source_reference": (
+                f"{clean_text(row.get('source_reference'))} | PARAMETERIZED POC FALLBACK"
+            ).strip(" |"),
+            "evidence_text": (
+                f"Parameterized fallback; original failure: {clean_text(original_reason)}"
+            ),
+            "raw_extraction": json.dumps(
+                {
+                    "parameterized_fallback": True,
+                    "original_rejection_reason": original_reason,
+                    "original_raw_extraction": row.get("raw_extraction"),
+                },
+                default=str,
+            ),
+        }
+    )
+    return fallback
+
+
+def build_failed_page_fallback(
+    document,
+    takeoff_run_id,
+    project_id,
+    page_no,
+    confidence_threshold,
+    error_message,
+):
+    base_row = {
+        "takeoff_run_id": takeoff_run_id,
+        "run_status": "processing",
+        "project_id": project_id,
+        "division_code": "",
+        "section_code": None,
+        "item_code": f"PAGE-{page_no}",
+        "item_description": f"Provisional allowance for {document.get('file_name')} page {page_no}",
+        "takeoff_category": "failed_source_page",
+        "quantity": None,
+        "uom": "Item",
+        "applicable_area": f"Page {page_no}",
+        "element_type": "provisional_allowance",
+        "element_mark": None,
+        "level_name": None,
+        "zone_name": None,
+        "calculation_method": "failed_page",
+        "calculation_formula": None,
+        "calculation_inputs": json.dumps({}),
+        "calculation_logic": "Source page could not be processed.",
+        "theoretical_basis": "POC provisional allowance.",
+        "drawing_scale_text": None,
+        "drawing_scale_ratio": None,
+        "geometry_source": None,
+        "geometry_data": json.dumps({}),
+        "symbol_name": None,
+        "symbol_count": None,
+        "source_document_id": document.get("document_id"),
+        "source_file_name": document.get("file_name"),
+        "source_relative_path": document.get("relative_path"),
+        "source_page": page_no,
+        "source_sheet": None,
+        "source_table_id": None,
+        "source_row_numbers": None,
+        "source_reference": (
+            f"{document.get('firebase_uri')} | page {page_no}"
+        ),
+        "evidence_text": clean_text(error_message),
+        "extraction_method": "failed_page",
+        "parser_name": "failed_page",
+        "model_name": None,
+        "confidence_score": 0.0,
+        "confidence_threshold": confidence_threshold,
+        "confidence_basis": "Source processing failed.",
+        "validation_status": "rejected_validation",
+        "is_boq_ready": False,
+        "rejection_reason": clean_text(error_message),
+        "raw_extraction": json.dumps({"page_error": clean_text(error_message)}),
+    }
+    return build_parameterized_fallback(
+        base_row,
+        confidence_threshold=confidence_threshold,
+        reason=error_message,
+    )
+
+
 INSERT_SQL = text(
     """
     INSERT INTO takeoff_layer (
@@ -858,8 +1113,10 @@ def generate_boq_takeoff(project_id):
     takeoff_run_id = make_run_id(project_id)
 
     rows_written = 0
-    accepted_rows = 0
+    accepted_source_rows = 0
+    parameterized_rows = 0
     rejected_rows = 0
+    row_insert_failures = 0
     pages_processed = 0
     file_results = []
     temporary_directory = tempfile.TemporaryDirectory(prefix="boq-takeoff-")
@@ -868,7 +1125,6 @@ def generate_boq_takeoff(project_id):
     for document_index, document in enumerate(documents, start=1):
         suffix = clean_text(document.get("file_extension")).lower()
         file_path = temporary_root / f"{document_index:06d}{suffix}"
-        suffix = file_path.suffix.lower()
         file_result = {
             "document_id": document.get("document_id"),
             "file_name": document.get("file_name"),
@@ -876,7 +1132,25 @@ def generate_boq_takeoff(project_id):
             "status": "pending",
             "pages_processed": 0,
             "rows_written": 0,
+            "accepted_source_rows": 0,
+            "parameterized_rows": 0,
+            "rejected_rows": 0,
+            "page_failures": [],
         }
+        accepted_source_fallback_candidates = []
+
+        def insert_one(row):
+            nonlocal rows_written, row_insert_failures
+            try:
+                with engine.begin() as connection:
+                    connection.execute(INSERT_SQL, row)
+                rows_written += 1
+                file_result["rows_written"] += 1
+                return None
+            except Exception as insert_exc:
+                row_insert_failures += 1
+                return f"{type(insert_exc).__name__}: {str(insert_exc)}"
+
         try:
             document["blob"].download_to_filename(str(file_path))
             if not file_path.exists() or file_path.stat().st_size == 0:
@@ -904,55 +1178,213 @@ def generate_boq_takeoff(project_id):
                         f"TAKEOFF_MAX_PAGES_PER_RUN={max_pages} reached. "
                         "Increase the configured limit and rerun."
                     )
-                if suffix in CAD_EXTENSIONS:
-                    analysis = analyze_dxf(file_path)
-                elif suffix in BIM_EXTENSIONS:
-                    analysis = analyze_ifc(file_path)
-                else:
-                    analysis = analyze_rendered_image(
-                        client=client,
-                        model=model,
-                        image_bytes=image_bytes,
-                        mime_type=mime_type,
-                        project_id=project_id,
-                        source_file_name=document.get("file_name"),
-                        page_no=page_no,
+                pages_processed += 1
+                file_result["pages_processed"] += 1
+                try:
+                    if suffix in CAD_EXTENSIONS:
+                        analysis = analyze_dxf(file_path)
+                    elif suffix in BIM_EXTENSIONS:
+                        analysis = analyze_ifc(file_path)
+                    else:
+                        analysis = analyze_rendered_image(
+                            client=client,
+                            model=model,
+                            image_bytes=image_bytes,
+                            mime_type=mime_type,
+                            project_id=project_id,
+                            source_file_name=document.get("file_name"),
+                            page_no=page_no,
+                        )
+                    rows = [
+                        observation_to_row(
+                            observation=observation,
+                            analysis=analysis,
+                            document=document,
+                            takeoff_run_id=takeoff_run_id,
+                            project_id=project_id,
+                            page_no=page_no,
+                            parser_name=parser_name,
+                            model_name=model if parser_name == "openai_vision" else None,
+                            confidence_threshold=confidence_threshold,
+                        )
+                        for observation in (analysis.get("observations") or [])
+                        if isinstance(observation, dict)
+                    ]
+                    if not rows:
+                        fallback = build_failed_page_fallback(
+                            document=document,
+                            takeoff_run_id=takeoff_run_id,
+                            project_id=project_id,
+                            page_no=page_no,
+                            confidence_threshold=confidence_threshold,
+                            error_message=(
+                                "OpenAI processing completed but returned no quantitative "
+                                "observations for this source page."
+                            ),
+                        )
+                        fallback_error = insert_one(fallback)
+                        if fallback_error:
+                            file_result["page_failures"].append(
+                                {
+                                    "page": page_no,
+                                    "error": f"empty-page fallback insert failed: {fallback_error}",
+                                }
+                            )
+                        else:
+                            parameterized_rows += 1
+                            file_result["parameterized_rows"] += 1
+                    for row in rows:
+                        insert_error = insert_one(row)
+                        if insert_error:
+                            fallback = build_parameterized_fallback(
+                                row,
+                                confidence_threshold,
+                                reason=f"database insert failed: {insert_error}",
+                            )
+                            fallback_error = insert_one(fallback)
+                            if fallback_error:
+                                file_result["page_failures"].append(
+                                    {
+                                        "page": page_no,
+                                        "error": f"source and fallback inserts failed: {fallback_error}",
+                                    }
+                                )
+                            else:
+                                parameterized_rows += 1
+                                file_result["parameterized_rows"] += 1
+                            continue
+
+                        if row["is_boq_ready"]:
+                            accepted_source_rows += 1
+                            file_result["accepted_source_rows"] += 1
+                            accepted_source_fallback_candidates.append(
+                                build_parameterized_fallback(
+                                    row,
+                                    confidence_threshold,
+                                    reason="source was later marked partially processed",
+                                )
+                            )
+                        else:
+                            rejected_rows += 1
+                            file_result["rejected_rows"] += 1
+                            fallback = build_parameterized_fallback(
+                                row, confidence_threshold
+                            )
+                            fallback_error = insert_one(fallback)
+                            if fallback_error:
+                                file_result["page_failures"].append(
+                                    {
+                                        "page": page_no,
+                                        "error": f"parameterized fallback insert failed: {fallback_error}",
+                                    }
+                                )
+                            else:
+                                parameterized_rows += 1
+                                file_result["parameterized_rows"] += 1
+                except Exception as page_exc:
+                    page_error = f"{type(page_exc).__name__}: {str(page_exc)}"
+                    file_result["page_failures"].append(
+                        {"page": page_no, "error": page_error}
                     )
-                rows = [
-                    observation_to_row(
-                        observation=observation,
-                        analysis=analysis,
+                    fallback = build_failed_page_fallback(
                         document=document,
                         takeoff_run_id=takeoff_run_id,
                         project_id=project_id,
                         page_no=page_no,
-                        parser_name=parser_name,
-                        model_name=model if parser_name == "openai_vision" else None,
                         confidence_threshold=confidence_threshold,
+                        error_message=page_error,
                     )
-                    for observation in (analysis.get("observations") or [])
-                    if isinstance(observation, dict)
-                ]
-                if rows:
-                    with engine.begin() as connection:
-                        connection.execute(INSERT_SQL, rows)
-                    rows_written += len(rows)
-                    file_result["rows_written"] += len(rows)
-                    accepted_rows += sum(row["is_boq_ready"] for row in rows)
-                    rejected_rows += sum(not row["is_boq_ready"] for row in rows)
-                pages_processed += 1
-                file_result["pages_processed"] += 1
-            file_result["status"] = "ok"
+                    fallback_error = insert_one(fallback)
+                    if fallback_error:
+                        file_result["page_failures"][-1]["fallback_error"] = fallback_error
+                    else:
+                        parameterized_rows += 1
+                        file_result["parameterized_rows"] += 1
+
+            if file_result["page_failures"]:
+                file_result["status"] = "partially_processed_with_parameterized_fallbacks"
+            elif file_result["accepted_source_rows"] and file_result["parameterized_rows"]:
+                file_result["status"] = "processed_with_source_and_parameterized_rows"
+            elif file_result["accepted_source_rows"]:
+                file_result["status"] = "processed_with_accepted_source_rows"
+            elif file_result["parameterized_rows"]:
+                file_result["status"] = "processed_with_parameterized_rows_only"
+            else:
+                file_result["status"] = "processed_no_quantities_detected"
         except Exception as exc:
-            file_result["status"] = "failed"
+            file_result["status"] = "failed_with_parameterized_fallback"
             file_result["error"] = f"{type(exc).__name__}: {str(exc)}"
+            fallback = build_failed_page_fallback(
+                document=document,
+                takeoff_run_id=takeoff_run_id,
+                project_id=project_id,
+                page_no=max(1, file_result["pages_processed"] + 1),
+                confidence_threshold=confidence_threshold,
+                error_message=file_result["error"],
+            )
+            fallback_error = insert_one(fallback)
+            if fallback_error:
+                file_result["fallback_error"] = fallback_error
+            else:
+                parameterized_rows += 1
+                file_result["parameterized_rows"] += 1
         finally:
             file_path.unlink(missing_ok=True)
+
+        source_failed = file_result["status"] in {
+            "partially_processed_with_parameterized_fallbacks",
+            "failed_with_parameterized_fallback",
+        }
+        if source_failed and file_result["accepted_source_rows"]:
+            with engine.begin() as connection:
+                disabled_result = connection.execute(
+                    text(
+                        """
+                        UPDATE takeoff_layer
+                        SET validation_status = 'rejected_validation',
+                            is_boq_ready = FALSE,
+                            rejection_reason = CONCAT_WS(
+                                '; ',
+                                NULLIF(rejection_reason, ''),
+                                'source excluded because one or more source pages failed'
+                            ),
+                            updated_at = NOW()
+                        WHERE takeoff_run_id = :takeoff_run_id
+                          AND source_relative_path = :source_relative_path
+                          AND parser_name <> 'parameterized_fallback'
+                          AND is_boq_ready = TRUE
+                        """
+                    ),
+                    {
+                        "takeoff_run_id": takeoff_run_id,
+                        "source_relative_path": document.get("relative_path"),
+                    },
+                )
+            disabled_count = max(0, int(disabled_result.rowcount or 0))
+            accepted_source_rows -= disabled_count
+            file_result["accepted_source_rows_excluded"] = disabled_count
+            file_result["accepted_source_rows"] -= disabled_count
+            for fallback in accepted_source_fallback_candidates:
+                fallback_error = insert_one(fallback)
+                if fallback_error:
+                    file_result.setdefault("fallback_errors", []).append(fallback_error)
+                else:
+                    parameterized_rows += 1
+                    file_result["parameterized_rows"] += 1
+
         file_results.append(file_result)
 
     temporary_directory.cleanup()
-    failed_files = sum(result.get("status") == "failed" for result in file_results)
-    run_is_publishable = accepted_rows > 0 and failed_files == 0
+    failed_files = sum(
+        result.get("status") == "failed_with_parameterized_fallback"
+        for result in file_results
+    )
+    partially_processed_files = sum(
+        result.get("status") == "partially_processed_with_parameterized_fallbacks"
+        for result in file_results
+    )
+    boq_ready_rows = accepted_source_rows + parameterized_rows
+    run_is_publishable = boq_ready_rows > 0
 
     with engine.begin() as connection:
         if run_is_publishable:
@@ -998,7 +1430,13 @@ def generate_boq_takeoff(project_id):
 
     return {
         "message": "BOQ takeoff layer processing completed.",
-        "status": "ok" if run_is_publishable else "validation_failed",
+        "status": (
+            "ok_with_parameterized_fallbacks"
+            if run_is_publishable and (failed_files or partially_processed_files or parameterized_rows)
+            else "ok"
+            if run_is_publishable
+            else "validation_failed"
+        ),
         "takeoff_run_id": takeoff_run_id,
         "project_id": project_id,
         "confidence_threshold": confidence_threshold,
@@ -1010,9 +1448,13 @@ def generate_boq_takeoff(project_id):
         "documents_selected": len(documents),
         "pages_processed": pages_processed,
         "rows_written": rows_written,
-        "accepted_boq_ready_rows": accepted_rows,
+        "accepted_source_rows": accepted_source_rows,
+        "parameterized_boq_ready_rows": parameterized_rows,
+        "accepted_boq_ready_rows": boq_ready_rows,
         "rejected_or_below_threshold_rows": rejected_rows,
         "failed_files": failed_files,
+        "partially_processed_files": partially_processed_files,
+        "row_insert_failures": row_insert_failures,
         "run_published_for_boq": run_is_publishable,
         "file_results": file_results,
         "next_step": (

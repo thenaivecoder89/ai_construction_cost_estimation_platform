@@ -90,12 +90,20 @@ def run_background_job(job_id, operation_func, operation_kwargs):
 
     try:
         result = operation_func(**operation_kwargs)
+        operation_status = (
+            result.get("status", "ok")
+            if isinstance(result, dict)
+            else "ok"
+        )
 
         with background_jobs_lock:
             background_jobs[job_id].update(
                 {
                     "status": "completed",
-                    "message": "Job completed successfully.",
+                    "message": (
+                        f"Background job completed. Operation status: {operation_status}."
+                    ),
+                    "operation_status": operation_status,
                     "result": result,
                     "completed_at": utc_now_iso(),
                     "updated_at": utc_now_iso(),

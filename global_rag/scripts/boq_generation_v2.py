@@ -1270,12 +1270,18 @@ def takeoff_rows_to_boq_items(takeoff_rows):
         source_parts = [
             f"takeoff_id={row.get('takeoff_id')}",
             f"takeoff_run_id={row.get('takeoff_run_id')}",
+            f"takeoff_category={clean_text(row.get('takeoff_category'))}",
+            f"parser={clean_text(row.get('parser_name'))}",
             clean_text(row.get("source_reference")),
             f"calculation={clean_text(row.get('calculation_formula'))}",
             f"logic={clean_text(row.get('calculation_logic'))}",
             f"theoretical_basis={clean_text(row.get('theoretical_basis'))}",
             f"confidence={row.get('confidence_score')}",
         ]
+        is_parameterized = (
+            clean_text(row.get("parser_name")) == "parameterized_fallback"
+            or clean_text(row.get("takeoff_category")).startswith("parameterized_fallback")
+        )
         item = boq_v1.make_boq_item(
             division_code=division_code,
             section_code=section_code,
@@ -1285,7 +1291,11 @@ def takeoff_rows_to_boq_items(takeoff_rows):
             quantity=quantity,
             unit_rate=0,
             source=" | ".join(part for part in source_parts if part),
-            confidence="high_takeoff_layer_accepted",
+            confidence=(
+                "parameterized_poc_requires_review"
+                if is_parameterized
+                else "high_takeoff_layer_accepted"
+            ),
         )
         item["source_mode"] = "takeoff_layer"
         item["takeoff_id"] = str(row.get("takeoff_id"))
@@ -1297,6 +1307,7 @@ def takeoff_rows_to_boq_items(takeoff_rows):
         item["calculation_inputs"] = row.get("calculation_inputs") or {}
         item["applicable_area"] = clean_text(row.get("applicable_area"))
         item["confidence_score"] = float(row.get("confidence_score"))
+        item["is_parameterized"] = is_parameterized
         items.append(item)
     return items
 
@@ -1342,6 +1353,11 @@ def generate_boq_v2(
         "Every quantity retains its calculation formula, inputs, logic, theoretical basis, source reference and confidence in takeoff_layer.",
         "Unit rates are populated only from the cost_database table; where no comparable cost_database rate is found, BOQ v2 leaves unit_rate_aed as 0.",
         "The legacy BOQ v2 document-text/RAG inference path is not used by this generation run.",
+        (
+            f"{sum(bool(item.get('is_parameterized')) for item in items)} BOQ rows "
+            "use explicitly labelled parameterized POC quantities and require "
+            "replacement with measured quantities before commercial use."
+        ),
     ]
 
     output_files = {}
