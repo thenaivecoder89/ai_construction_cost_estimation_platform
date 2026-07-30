@@ -17,6 +17,7 @@ import math
 import operator
 import os
 import re
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -575,32 +576,112 @@ def analyze_ifc(file_path):
     }
 
 
-def fetch_source_documents(engine, project_id):
+def fetch_existing_document_metadata(engine, project_id):
+    """Optional database metadata used only to preserve document_id traceability."""
+    if not inspect(engine).has_table("documents"):
+        return []
     query = text(
         """
-        SELECT
-            document_id,
-            file_name,
-            file_extension,
-            relative_path,
-            absolute_path
-        FROM build_document_inventory
-        WHERE source_group = 'client_data'
+        SELECT document_id, file_name, relative_path
+        FROM documents
+        WHERE corpus_zone = 'client_data'
           AND corpus_pack = :project_id
-          AND LOWER(file_extension) IN (
-              '.pdf', '.png', '.jpg', '.jpeg', '.webp', '.dxf', '.ifc'
-          )
         ORDER BY document_id
         """
     )
     with engine.begin() as connection:
         return [
             dict(row)
-            for row in connection.execute(
-                query,
-                {"project_id": project_id},
-            ).mappings()
+            for row in connection.execute(query, {"project_id": project_id}).mappings()
         ]
+
+
+def match_existing_document(blob_relative_path, file_name, existing_documents):
+    normalized_blob_path = clean_text(blob_relative_path).replace("\\", "/").lower()
+    path_matches = []
+    name_matches = []
+    for document in existing_documents:
+        document_path = clean_text(document.get("relative_path")).replace("\\", "/").lower()
+        if document_path and (
+            document_path == normalized_blob_path
+            or document_path.endswith(f"/{normalized_blob_path}")
+            or normalized_blob_path.endswith(f"/{document_path}")
+        ):
+            path_matches.append(document)
+        if clean_text(document.get("file_name")).lower() == clean_text(file_name).lower():
+            name_matches.append(document)
+    if len(path_matches) == 1:
+        return path_matches[0]
+    if len(name_matches) == 1:
+        return name_matches[0]
+    return {}
+
+
+def discover_firebase_documents(engine, project_id):
+    """
+    Recursively discover supported files below the Firebase client-data root.
+
+    Google Cloud Storage is a flat object store; list_blobs(prefix=...) returns
+    objects at every apparent child-folder depth, so no local directory layout
+    or fixed Architecture/Structure nesting is assumed.
+    """
+    firebase_root = os.getenv(
+        "TAKEOFF_FIREBASE_ROOT",
+        "gs://ai-construction-cost-est.firebasestorage.app/client_data",
+    ).strip()
+    bucket_name, prefix = config.split_gs_bucket_and_prefix(firebase_root)
+    if not bucket_name or not prefix:
+        raise RuntimeError(
+            "TAKEOFF_FIREBASE_ROOT must include both bucket and client-data prefix."
+        )
+
+    storage_client = config.get_storage_client()
+    bucket = storage_client.bucket(bucket_name)
+    prefix_with_slash = f"{prefix.rstrip('/')}/"
+    existing_documents = fetch_existing_document_metadata(engine, project_id)
+    documents = []
+
+    for blob in storage_client.list_blobs(bucket, prefix=prefix_with_slash):
+        if blob.name.endswith("/"):
+            continue
+        if not blob.name.startswith(prefix_with_slash):
+            continue
+        relative_path = blob.name[len(prefix_with_slash):]
+        if not relative_path:
+            continue
+        file_name = Path(relative_path).name
+        suffix = Path(file_name).suffix.lower()
+        if suffix not in SUPPORTED_EXTENSIONS:
+            continue
+        if file_name.lower().endswith(":zone.identifier"):
+            continue
+
+        existing = match_existing_document(
+            blob_relative_path=relative_path,
+            file_name=file_name,
+            existing_documents=existing_documents,
+        )
+        documents.append(
+            {
+                "document_id": existing.get("document_id"),
+                "file_name": file_name,
+                "file_extension": suffix,
+                "relative_path": relative_path,
+                "firebase_bucket": bucket_name,
+                "firebase_blob_name": blob.name,
+                "firebase_uri": f"gs://{bucket_name}/{blob.name}",
+                "blob": blob,
+                "size_bytes": getattr(blob, "size", None),
+            }
+        )
+
+    documents.sort(key=lambda item: item["firebase_blob_name"].lower())
+    return {
+        "firebase_root": f"gs://{bucket_name}/{prefix}",
+        "bucket_name": bucket_name,
+        "prefix": prefix,
+        "documents": documents,
+    }
 
 
 def ensure_takeoff_table(engine):
@@ -674,8 +755,14 @@ def observation_to_row(
         "source_sheet": clean_text(validated.get("source_sheet")) or None,
         "source_table_id": None,
         "source_row_numbers": None,
-        "source_reference": clean_text(validated.get("source_reference")) or (
-            f"{document.get('file_name')} page {page_no}"
+        "source_reference": " | ".join(
+            part
+            for part in [
+                clean_text(document.get("firebase_uri")),
+                f"page {page_no}",
+                clean_text(validated.get("source_reference")),
+            ]
+            if part
         ),
         "evidence_text": clean_text(validated.get("evidence_text")) or None,
         "extraction_method": "openai_vision_ocr" if parser_name == "openai_vision" else parser_name,
@@ -692,6 +779,7 @@ def observation_to_row(
                 "observation": observation,
                 "page_classification": analysis.get("page_classification"),
                 "detected_scale": detected_scale,
+                "firebase_uri": document.get("firebase_uri"),
             },
             default=str,
         ),
@@ -742,16 +830,17 @@ def generate_boq_takeoff(project_id):
         raise ValueError("project_id must be provided.")
 
     base = config.config_base()
-    paths = config.config_paths(client_data=project_id)
     if not base.get("openai_api_key"):
         raise RuntimeError("OPENAI_API_KEY is required for the takeoff layer.")
 
     engine = create_engine(base["db_url"], pool_pre_ping=True)
     ensure_takeoff_table(engine)
-    documents = fetch_source_documents(engine, project_id)
+    firebase_discovery = discover_firebase_documents(engine, project_id)
+    documents = firebase_discovery["documents"]
     if not documents:
         raise RuntimeError(
-            f"No eligible client drawing files found in build_document_inventory for {project_id}."
+            "No supported drawing files were found recursively below "
+            f"{firebase_discovery['firebase_root']}."
         )
 
     confidence_threshold = float(
@@ -773,22 +862,27 @@ def generate_boq_takeoff(project_id):
     rejected_rows = 0
     pages_processed = 0
     file_results = []
+    temporary_directory = tempfile.TemporaryDirectory(prefix="boq-takeoff-")
+    temporary_root = Path(temporary_directory.name)
 
-    for document in documents:
-        file_path = Path(document.get("absolute_path") or "")
-        if not file_path.exists():
-            file_path = paths["project_root"] / str(document.get("relative_path") or "")
+    for document_index, document in enumerate(documents, start=1):
+        suffix = clean_text(document.get("file_extension")).lower()
+        file_path = temporary_root / f"{document_index:06d}{suffix}"
         suffix = file_path.suffix.lower()
         file_result = {
             "document_id": document.get("document_id"),
             "file_name": document.get("file_name"),
+            "firebase_uri": document.get("firebase_uri"),
             "status": "pending",
             "pages_processed": 0,
             "rows_written": 0,
         }
         try:
-            if not file_path.exists():
-                raise FileNotFoundError(f"Source file not found: {file_path}")
+            document["blob"].download_to_filename(str(file_path))
+            if not file_path.exists() or file_path.stat().st_size == 0:
+                raise RuntimeError(
+                    f"Firebase download produced an empty file: {document.get('firebase_uri')}"
+                )
             if suffix in PDF_EXTENSIONS:
                 payloads = render_pdf_pages(file_path, render_dpi)
                 parser_name = "openai_vision"
@@ -852,8 +946,11 @@ def generate_boq_takeoff(project_id):
         except Exception as exc:
             file_result["status"] = "failed"
             file_result["error"] = f"{type(exc).__name__}: {str(exc)}"
+        finally:
+            file_path.unlink(missing_ok=True)
         file_results.append(file_result)
 
+    temporary_directory.cleanup()
     failed_files = sum(result.get("status") == "failed" for result in file_results)
     run_is_publishable = accepted_rows > 0 and failed_files == 0
 
@@ -907,6 +1004,9 @@ def generate_boq_takeoff(project_id):
         "confidence_threshold": confidence_threshold,
         "render_dpi": render_dpi,
         "model": model,
+        "firebase_root": firebase_discovery["firebase_root"],
+        "firebase_bucket": firebase_discovery["bucket_name"],
+        "firebase_prefix": firebase_discovery["prefix"],
         "documents_selected": len(documents),
         "pages_processed": pages_processed,
         "rows_written": rows_written,
