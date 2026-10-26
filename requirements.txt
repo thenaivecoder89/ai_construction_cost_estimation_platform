@@ -25,3 +25,4 @@ pydantic
 statsmodels
 google-cloud-storage
 extract-msg
+python-multipart>=0.0.18
