@@ -6,6 +6,9 @@ from pathlib import Path
 import base64
 import json
 import os
+from global_rag.scripts.project_paths import (
+    PROJECTS_PREFIX, CORPUS_PREFIX, CORPUS_LOCAL_PATH, contained_path,
+)
 try:
     from dotenv import load_dotenv
 except ModuleNotFoundError:
@@ -144,32 +147,36 @@ def sync_firebase_storage_prefix(firebase_storage_bucket, firebase_prefix, local
         prefix=firebase_prefix,
     )
 
+    if prefix not in {PROJECTS_PREFIX, CORPUS_PREFIX}:
+        raise ValueError("RAG synchronization must use the projects or exact BOK/BOK source root.")
     local_dir = Path(local_dir)
     local_dir.mkdir(parents=True, exist_ok=True)
 
     storage_client = get_storage_client()
     bucket = storage_client.bucket(bucket_name)
-    blobs = list(storage_client.list_blobs(bucket, prefix=prefix))
+    prefix_with_slash = f"{prefix}/"
+    blobs = list(storage_client.list_blobs(bucket, prefix=prefix_with_slash))
 
     downloaded_files = []
     skipped_blobs = []
-
-    prefix_with_slash = f"{prefix.rstrip('/')}/" if prefix else ""
 
     for blob in blobs:
         if blob.name.endswith("/"):
             continue
 
-        if prefix_with_slash and blob.name.startswith(prefix_with_slash):
-            relative_blob_path = blob.name[len(prefix_with_slash):]
-        else:
-            relative_blob_path = Path(blob.name).name
+        if not blob.name.startswith(prefix_with_slash):
+            skipped_blobs.append(blob.name)
+            continue
+        relative_blob_path = blob.name[len(prefix_with_slash):]
+        if Path(relative_blob_path).name in {".DS_Store", "Thumbs.db", ".identifier"} or relative_blob_path.lower().endswith(":zone.identifier"):
+            skipped_blobs.append(blob.name)
+            continue
 
         if not relative_blob_path:
             skipped_blobs.append(blob.name)
             continue
 
-        local_file_path = local_dir / relative_blob_path
+        local_file_path = contained_path(local_dir, relative_blob_path)
         local_file_path.parent.mkdir(parents=True, exist_ok=True)
         blob.download_to_filename(str(local_file_path))
         downloaded_files.append(str(local_file_path))
@@ -179,6 +186,8 @@ def sync_firebase_storage_prefix(firebase_storage_bucket, firebase_prefix, local
         "prefix": prefix,
         "local_dir": str(local_dir),
         "downloaded_files": len(downloaded_files),
+        # Inventory consumes this per-run list; stale local cache files are excluded.
+        "source_files": downloaded_files,
         "skipped_blobs": skipped_blobs,
     }
 
@@ -213,7 +222,7 @@ def sync_corpus_from_firebase(config_settings):
     return sync_firebase_storage_prefix(
         firebase_storage_bucket=config_settings["firebase_storage_bucket"],
         firebase_prefix=config_settings["firebase_corpus_prefix"],
-        local_dir=config_settings["corpus_dir"],
+        local_dir=config_settings["corpus_dir"] / CORPUS_LOCAL_PATH,
     )
 
 
@@ -289,9 +298,8 @@ def config_paths(client_data: str):
     load_project_dotenv()
 
     # Project paths
-    repo_root = Path(__file__).resolve().parents[2]
     project_root = Path(__file__).resolve().parent.parent
-    corpus_dir = Path(os.getenv("CORPUS_DIR", project_root / "corpus")).expanduser()
+    corpus_dir = Path(os.getenv("CORPUS_DIR", project_root / "corpus")).expanduser().resolve()
     client_data_dir = project_root / "client_data"
     output_dir = project_root / "output"
     draft_report_dir = output_dir / "draft_report"
@@ -305,9 +313,9 @@ def config_paths(client_data: str):
         raise ValueError("client_data must be provided.")
 
     # Corpus packs are discovered dynamically after Firebase sync/local download.
-    # The inventory scanner uses corpus_dir as the recursive scan root.
-    corpus_packs = discover_immediate_subdirectories(corpus_dir)
-    corpus_scan_dirs = [corpus_dir]
+    # Keep BOK/BOK in local relative paths even though Firebase sync starts deeper.
+    corpus_packs = discover_immediate_subdirectories(corpus_dir / CORPUS_LOCAL_PATH)
+    corpus_scan_dirs = [corpus_dir / CORPUS_LOCAL_PATH]
 
     firebase_storage_bucket = required_env("FIREBASE_STORAGE_BUCKET")
     firebase_corpus_prefix = required_env("FIREBASE_CORPUS_PREFIX").strip("/")
@@ -315,49 +323,17 @@ def config_paths(client_data: str):
     firebase_sync_client_data = bool_env("FIREBASE_SYNC_CLIENT_DATA", False)
     firebase_sync_corpus = bool_env("FIREBASE_SYNC_CORPUS", False)
 
-    # Client data can be stored either as legacy pack folders:
-    #   client_data/<client_data>/...
-    # or as the active project root:
-    #   client_data/Architecture/... and client_data/Structure/...
-    #
-    # CLIENT_DATA_LAYOUT may be set to "pack" or "root" in Railway.
-    # The repo name and neutral aliases are also accepted for the root layout
-    # so existing API clients can pass ai_construction_cost_estimation_platform.
-    configured_client_data_layout = os.getenv("CLIENT_DATA_LAYOUT", "").strip().lower()
-    root_layout_aliases = {
-        "client_data",
-        "root",
-        "all",
-        "ai_construction_cost_estimation_platform",
-        repo_root.name,
-    }
+    if firebase_client_data_prefix != PROJECTS_PREFIX:
+        raise ValueError("FIREBASE_CLIENT_DATA_PREFIX must be projects.")
+    if firebase_corpus_prefix != CORPUS_PREFIX:
+        raise ValueError("FIREBASE_CORPUS_PREFIX must be corpus/ai_construction_cost_estimation_platform/BOK/BOK.")
 
-    legacy_client_data_dir = client_data_dir / client_data
-
-    if configured_client_data_layout in ["root", "direct_root", "flat"]:
-        client_data_layout = "root"
-    elif configured_client_data_layout in ["pack", "legacy_pack", "client_pack"]:
-        client_data_layout = "pack"
-    elif client_data.lower() in root_layout_aliases:
-        client_data_layout = "root"
-    elif legacy_client_data_dir.exists():
-        client_data_layout = "pack"
-    else:
-        client_data_layout = "root"
-
-    if client_data_layout == "root":
-        active_client_data_dir = client_data_dir
-        firebase_client_data_active_prefix = firebase_client_data_prefix
-    else:
-        active_client_data_dir = legacy_client_data_dir
-        firebase_client_data_active_prefix = (
-            f"{firebase_client_data_prefix}/{client_data}".strip("/")
-        )
-
-    # Client data packs
-    client_data_packs = {
-        client_data: active_client_data_dir
-    }
+    # Both Y and N inventory runs include the full projects tree. client_data is
+    # retained as the existing API argument; actual project IDs come from folders.
+    client_data_layout = "root"
+    active_client_data_dir = client_data_dir
+    firebase_client_data_active_prefix = firebase_client_data_prefix
+    client_data_packs = discover_immediate_subdirectories(client_data_dir)
 
     # File handling
     supported_text_extensions = [".txt", ".md"]

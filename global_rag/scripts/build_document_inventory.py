@@ -11,12 +11,42 @@
 
 import pandas as pd
 import hashlib
+import re
 from datetime import datetime
 from pathlib import Path
 from sqlalchemy import create_engine, inspect, text
 
 # Import paths and settings from the config file
 from global_rag.scripts import config
+from global_rag.scripts.project_paths import validate_project_id, contained_path
+
+
+
+def document_ids_for_paths(relative_paths, known_documents):
+    """Keep existing identities and allocate above all retained numeric IDs."""
+    ids_by_path = {}
+    paths_by_id = {}
+    max_document_number = 0
+    for row in known_documents:
+        document_id, relative_path = row["document_id"], row["relative_path"]
+        if not document_id or not relative_path:
+            raise ValueError("Existing document identities contain an empty ID or path; review them before rebuilding.")
+        if (relative_path in ids_by_path and ids_by_path[relative_path] != document_id
+                or document_id in paths_by_id and paths_by_id[document_id] != relative_path):
+            raise ValueError("Conflicting existing document IDs/relative paths; inventory was not changed.")
+        ids_by_path[relative_path] = document_id
+        paths_by_id[document_id] = relative_path
+        match = re.fullmatch(r"DOC_([0-9]+)", document_id)
+        if match:
+            max_document_number = max(max_document_number, int(match.group(1)))
+
+    result = []
+    for relative_path in relative_paths:
+        if relative_path not in ids_by_path:
+            max_document_number += 1
+            ids_by_path[relative_path] = f"DOC_{max_document_number:06d}"
+        result.append(ids_by_path[relative_path])
+    return result
 
 
 def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
@@ -29,6 +59,11 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
 
     firebase_corpus_sync = config.sync_corpus_from_firebase(config_settings)
     firebase_client_data_sync = config.sync_client_data_from_firebase(config_settings)
+    # Consume the listing without changing the existing API's sync summaries.
+    source_files = {
+        config_settings["active_client_data_dir"]: firebase_client_data_sync.pop("source_files", None),
+        config_settings["corpus_scan_dirs"][0]: firebase_corpus_sync.pop("source_files", None),
+    }
     
     # Establish DB connection
     engine = create_engine(
@@ -41,7 +76,7 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
     # not output and scripts since these do not contain evidence data
     folders_to_scan = [
         config_settings["active_client_data_dir"],
-        config_settings["corpus_dir"],
+        *config_settings["corpus_scan_dirs"],
     ]
 
     # Define files and folders to ignore when scanning
@@ -76,39 +111,10 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
 
     inventory_table_name = "build_document_inventory"
     table_exists = inspect(engine).has_table(inventory_table_name)
-    existing_relative_paths = set()
-    max_document_number = 0
-
-    if rebuild_inventory == "N" and table_exists:
-        existing_inventory_df = pd.read_sql(
-            text(f"""
-                SELECT
-                    document_id,
-                    relative_path
-                FROM {inventory_table_name}
-            """),
-            engine
-        )
-
-        existing_relative_paths = set(
-            existing_inventory_df["relative_path"].dropna().astype(str).tolist()
-        )
-
-        with engine.begin() as conn:
-            max_document_number = conn.execute(
-                text(f"""
-                    SELECT COALESCE(
-                        MAX(CAST(REPLACE(document_id, 'DOC_', '') AS INTEGER)),
-                        0
-                    ) AS max_document_number
-                    FROM {inventory_table_name}
-                    WHERE document_id LIKE 'DOC_%'
-                """)
-            ).scalar()
-
+    if not table_exists:
+        raise RuntimeError("The existing build_document_inventory table is required; this program does not create tables.")
     # Scan files and build inventory for RAG
     inventory_rows = []
-    document_counter = int(max_document_number) + 1
     scan_folders = [str(scan_root) for scan_root in folders_to_scan]
     missing_folders = []
 
@@ -120,8 +126,11 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
             print(f"WARNING: Folder does not exist and will be skipped: {scan_root}")
             continue
 
-        # Recursively scan all files in the folder
-        for file_path in scan_root.rglob("*"):
+        # With synchronization enabled, scan exactly this run's Firebase listing.
+        # Without it, preserve the existing local-folder workflow.
+        downloaded = source_files.get(scan_root)
+        files = (Path(value) for value in downloaded) if downloaded is not None else scan_root.rglob("*")
+        for file_path in files:
 
             # Skip folders
             if file_path.is_dir():
@@ -143,6 +152,8 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
             if any(file_path.name.startswith(prefix) for prefix in ignore_file_prefixes):
                 continue
 
+            contained_path(scan_root, file_path.relative_to(scan_root).as_posix())
+
             # Get  file extension in lowercase
             file_ext = file_path.suffix.lower()
 
@@ -162,7 +173,10 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
 
             # Section B: Identify corpus/ client data pack
             if source_group == "client_data":
-                corpus_pack = client_data
+                if len(relative_to_group.parts) < 2:
+                    # Files directly under projects/ have no project attribution.
+                    continue
+                corpus_pack = validate_project_id(relative_to_group.parts[0])
             elif len(relative_to_group.parts) > 2:
                 corpus_pack = relative_to_group.parts[1]
             elif len(relative_to_group.parts) > 1:
@@ -235,14 +249,10 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
             
             sha256_checksum = sha256_hash.hexdigest() # Finalize a 64-character hexadecimal string after completion of hash calculation (sha256_hash parameter)
 
-            # Section G: Create document ID
-            document_ID = f"DOC_{document_counter:06d}"
-            document_counter += 1
-
             # Section H: Create inventory row
             inventory_rows.append(
                 {
-                    "document_id": document_ID,
+                    "document_id": None,  # Assigned from retained identities in the write transaction.
                     "source_group": source_group,
                     "corpus_pack": corpus_pack,
                     "file_name": file_path.name,
@@ -284,20 +294,6 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
 
     scanned_files_count = len(inventory_df)
 
-    if rebuild_inventory == "N":
-        inventory_df = inventory_df[
-            ~inventory_df["relative_path"].isin(existing_relative_paths)
-        ].copy()
-
-        inventory_df["document_id"] = [
-            f"DOC_{document_number:06d}"
-            for document_number in range(
-                int(max_document_number) + 1,
-                int(max_document_number) + 1 + len(inventory_df)
-            )
-        ]
-
-    rows_written_count = len(inventory_df)
     source_group_counts = {}
     pack_counts = {}
 
@@ -308,13 +304,38 @@ def build_document_inventory(client_data: str, rebuild_inventory: str = "Y"):
         pack_counts[corpus_pack] = pack_counts.get(corpus_pack, 0) + 1
 
     with engine.begin() as conn:
-        inventory_df[columns_to_insert].to_sql(
-            name=inventory_table_name,
-            con=conn,
-            index=False,
-            method="multi",
-            if_exists="replace" if rebuild_inventory == "Y" else "append"
+        # Serialize inventory ID allocation and writes without any schema changes.
+        conn.execute(text("LOCK TABLE build_document_inventory IN SHARE ROW EXCLUSIVE MODE"))
+        existing_inventory = conn.execute(text(
+            "SELECT document_id, relative_path FROM build_document_inventory"
+        )).mappings().all()
+        historical_documents = conn.execute(text(
+            "SELECT document_id, relative_path FROM documents"
+        )).mappings().all()
+        if rebuild_inventory == "N":
+            existing_relative_paths = {row["relative_path"] for row in existing_inventory}
+            inventory_df = inventory_df[
+                ~inventory_df["relative_path"].isin(existing_relative_paths)
+            ].copy()
+        # Include historical documents so removed/reintroduced paths keep their
+        # identities and new files cannot reuse an ID still used downstream.
+        inventory_df["document_id"] = document_ids_for_paths(
+            inventory_df["relative_path"].tolist(),
+            list(existing_inventory) + list(historical_documents),
         )
+        # Preserve full Y replacement of inventory DATA, without pandas dropping
+        # and recreating the existing table (which would alter its schema).
+        if rebuild_inventory == "Y":
+            conn.execute(text("DELETE FROM build_document_inventory"))
+        if not inventory_df.empty:
+            column_sql = ", ".join(columns_to_insert)
+            value_sql = ", ".join(f":{column}" for column in columns_to_insert)
+            conn.execute(
+                text(f"INSERT INTO build_document_inventory ({column_sql}) VALUES ({value_sql})"),
+                inventory_df[columns_to_insert].to_dict(orient="records"),
+            )
+
+    rows_written_count = len(inventory_df)
 
     if __name__ == "__main__":
         # Print basic summary

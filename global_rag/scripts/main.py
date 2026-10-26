@@ -15,6 +15,8 @@ import global_rag.scripts.country_arima_llm_call as arimallm
 from global_rag.scripts import investment_chatbot as chatbot
 
 import json
+import hmac
+import os
 import time
 import traceback
 import uuid
@@ -22,11 +24,14 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from threading import Lock
 from typing import Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from starlette.responses import FileResponse, JSONResponse, StreamingResponse
 from pathlib import Path
+from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile
+from global_rag.scripts import project_uploads
 
 app = FastAPI()
 background_job_executor = ThreadPoolExecutor(max_workers=1)
@@ -862,3 +867,51 @@ def ai_cost_estimation_chatbot_api(
         )
 
         return api_response
+
+
+@app.post("/upload_files", status_code=200, openapi_extra={
+    "requestBody": {"required": True, "content": {"multipart/form-data": {"schema": {
+        "type": "object", "required": ["destination", "files"], "properties": {
+            "destination": {"type": "string", "enum": ["projects", "corpus"]},
+            "project_id": {"type": "string"},
+            "target_folder": {"type": "string"},
+            "files": {"type": "array", "items": {"type": "string", "format": "binary"}},
+            "overwrite": {"type": "boolean", "default": False}
+        }}}}}
+})
+async def upload_files_api(request: Request, x_upload_token: Optional[str] = Header(default=None)):
+    # No baseline admin protection exists. This check applies ONLY to this new
+    # write route, before multipart parsing; all existing route behavior is retained.
+    expected = os.getenv("UPLOAD_API_TOKEN", "")
+    if len(expected) < 32:
+        raise HTTPException(status_code=503, detail="Uploads are disabled until the owner configures UPLOAD_API_TOKEN (at least 32 characters) for trusted administrative callers.")
+    if not x_upload_token or not hmac.compare_digest(x_upload_token.encode(), expected.encode()):
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Upload-Token.")
+    try:
+        async with request.form(max_files=project_uploads.MAX_FILES, max_fields=4) as form:
+            if any(key not in {"destination", "project_id", "target_folder", "files", "overwrite"} for key in form):
+                raise ValueError("Unknown multipart field; arbitrary storage destinations are not accepted.")
+            for key in {"destination", "project_id", "target_folder", "overwrite"}:
+                if len(form.getlist(key)) > 1 or isinstance(form.get(key), UploadFile):
+                    raise ValueError("Scalar form fields must occur once and contain text.")
+            files = form.getlist("files")
+            if not files or not all(isinstance(file, UploadFile) for file in files):
+                raise ValueError("files must contain a ZIP archive or individual documents.")
+            overwrite = form.get("overwrite", "false").lower()
+            if overwrite not in {"true", "false"}:
+                raise ValueError("overwrite must be true or false.")
+            result = await run_in_threadpool(
+                project_uploads.upload_files, destination=form.get("destination"), files=files,
+                project_id=form.get("project_id"), target_folder=form.get("target_folder"),
+                overwrite=overwrite == "true",
+            )
+    except project_uploads.UploadTooLarge as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Upload storage configuration is unavailable; the owner should check Firebase credential settings.") from exc
+    status_code = 200
+    if result["status"] == "failed":
+        status_code = 409 if all(error["code"] == "object_conflict" for error in result["errors"]) else 502
+    return JSONResponse(content=result, status_code=status_code)

@@ -26,6 +26,7 @@ from openai import OpenAI
 from sqlalchemy import create_engine, inspect, text
 
 from global_rag.scripts import config
+from global_rag.scripts.project_paths import takeoff_prefix
 
 
 WORKSTREAM = "ai_construction_cost_estimation_platform"
@@ -670,15 +671,11 @@ def discover_firebase_documents(engine, project_id):
     objects at every apparent child-folder depth, so no local directory layout
     or fixed Architecture/Structure nesting is assumed.
     """
+    bucket_name = config.required_env("FIREBASE_STORAGE_BUCKET")
     firebase_root = os.getenv(
-        "TAKEOFF_FIREBASE_ROOT",
-        "gs://ai-construction-cost-est.firebasestorage.app/client_data",
+        "TAKEOFF_FIREBASE_ROOT", f"gs://{bucket_name}/projects"
     ).strip()
-    bucket_name, prefix = config.split_gs_bucket_and_prefix(firebase_root)
-    if not bucket_name or not prefix:
-        raise RuntimeError(
-            "TAKEOFF_FIREBASE_ROOT must include both bucket and client-data prefix."
-        )
+    prefix = takeoff_prefix(firebase_root, bucket_name, project_id).rstrip("/")
 
     storage_client = config.get_storage_client()
     bucket = storage_client.bucket(bucket_name)
